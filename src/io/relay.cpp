@@ -17,6 +17,14 @@ static uint32_t stateChangeStartTime = 0;
 static bool waitingForChange = false;
 static bool pendingTargetState = false;
 
+#if RELAY_USE_LATCH_PINS && RELAY_LATCH_FOLLOW_STATE
+static bool lastLatchSetState = false;
+static bool latchStateReady = false;
+static bool latchWaitingForPulse = false;
+static bool pendingLatchSetState = false;
+static uint32_t latchStateChangeStartMs = 0;
+#endif
+
 static bool isLatchSetState(const String& stableState)
 {
   return stableState == "C" || stableState == "D";
@@ -80,6 +88,28 @@ void relay_set_auto_enabled(bool en) { relayAutoEnabled = en; }
 bool relay_is_auto_enabled() { return relayAutoEnabled; }
 bool relay_get() { return relayOn; }
 
+void relay_force_off_now()
+{
+  relayOn = false;
+  waitingForChange = false;
+  pendingTargetState = false;
+  writeRelayPin();
+
+#if RELAY_USE_LATCH_PINS
+  pulseLatchPin(MOSFET_RESET_PIN);
+#endif
+
+#if RELAY_USE_LATCH_PINS && RELAY_LATCH_FOLLOW_STATE
+  latchWaitingForPulse = false;
+  pendingLatchSetState = false;
+  lastLatchSetState = false;
+  latchStateReady = true;
+  latchStateChangeStartMs = millis();
+#endif
+
+  lastSwitchMs = millis();
+}
+
 void relay_set(bool on)
 {
   relayAutoEnabled = false; // Manuel müdahalede otomatiği kapat
@@ -135,12 +165,6 @@ void relay_update_auto(const String& stableState, bool pwmEnabled, int pwmDutyPe
 void relay_handle_state_pulse(const String& stableState)
 {
 #if RELAY_USE_LATCH_PINS && RELAY_LATCH_FOLLOW_STATE
-  static bool lastLatchSetState = false;
-  static bool latchStateReady = false;
-  static bool latchWaitingForPulse = false;
-  static bool pendingLatchSetState = false;
-  static uint32_t latchStateChangeStartMs = 0;
-
   bool latchSetState = isLatchSetState(stableState);
 
   if (!latchStateReady) {

@@ -29,6 +29,8 @@ float g_currentLimitA = 32.0f;
 
 // Hızlı kontrol modu: 0=AUTO, 1=START, 2=STOP
 int g_chargeMode = 0;
+uint32_t g_manualStopAlertUntilMs = 0;
+uint32_t g_manualStopAutoResumeAtMs = 0;
 
 // Aktif seans bilgisi
 bool g_sessionLive = false;
@@ -283,7 +285,7 @@ void loop()
   // OLED ?iz
   oled_draw(m.stateStable, ia, ib, ic, powerW, energyKWh, chargeSeconds, relaySet, staOk, cableConnected);
   // LED map:
-  // - STATE_LED_PIN (GPIO8): sadece state C iken blink
+  // - STATE_LED_PIN (GPIO8): C'de normal blink, D'de cift flash
   // - WIFI_LED_PIN  (GPIO17): Wi-Fi bagliyken ON
   // - ERROR_LED_PIN (GPIO18): state E/F iken ON
   static uint32_t ledTickMs = 0;
@@ -294,11 +296,27 @@ void loop()
     ledTickMs = ledNowMs;
     ledPhase = !ledPhase;
   }
-  bool stateBlink = (m.stateStable == "C") && ledPhase;
-  bool errorOn = (m.stateStable == "E" || m.stateStable == "F");
+  bool stateBlink = false;
+  if (m.stateStable == "C") {
+    stateBlink = ledPhase;
+  } else if (m.stateStable == "D") {
+    const uint32_t dCycleMs = 1200;
+    const uint32_t dPhaseMs = ledNowMs % dCycleMs;
+    stateBlink = (dPhaseMs < 120) || (dPhaseMs >= 240 && dPhaseMs < 360);
+  }
+  bool manualStopAlertOn = (g_manualStopAlertUntilMs != 0 && ((int32_t)(g_manualStopAlertUntilMs - ledNowMs) > 0));
+  bool errorOn = (m.stateStable == "E" || m.stateStable == "F" || manualStopAlertOn);
   digitalWrite(STATE_LED_PIN, stateBlink ? HIGH : LOW);
   digitalWrite(WIFI_LED_PIN, staOk ? HIGH : LOW);
   digitalWrite(ERROR_LED_PIN, errorOn ? HIGH : LOW);
+
+  // Manuel stop 60 saniye sonra otomatik AUTO moduna donsün.
+  if (g_chargeMode == 2 &&
+      g_manualStopAutoResumeAtMs != 0 &&
+      (int32_t)(ledNowMs - g_manualStopAutoResumeAtMs) >= 0) {
+    g_chargeMode = 0;
+    g_manualStopAutoResumeAtMs = 0;
+  }
 
 
 
@@ -345,8 +363,10 @@ void loop()
                   pwmDutyPercent);
   }
 
-  // SET/RESET latch cikislari role degil, state gecisinden tetiklensin.
-  relay_handle_state_pulse(m.stateStable);
+  // Manuel stop modunda latch pulse takibini durdur.
+  if (g_chargeMode != 2) {
+    relay_handle_state_pulse(m.stateStable);
+  }
 
   // Röle kontrolü: Sadece C veya D durumunda ve PWM aktifken çalışır
   relay_update_auto(m.stateStable, pwmEnabled, pwmDutyPercent);

@@ -4,6 +4,7 @@
 void relay_init();
 void relay_set(bool on);
 bool relay_get();
+void relay_force_off_now();
 
 // Röle AUTO yönetimi
 void relay_update_auto(const String& stableState, bool pwmEnabled, int pwmDutyPercent);

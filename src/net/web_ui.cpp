@@ -31,6 +31,8 @@ extern uint32_t g_chargeSeconds;
 extern int g_phaseCount;
 extern float g_currentLimitA;
 extern int g_chargeMode;
+extern uint32_t g_manualStopAlertUntilMs;
+extern uint32_t g_manualStopAutoResumeAtMs;
 extern bool g_sessionLive;
 extern uint32_t g_sessionLiveStartSec;
 extern uint32_t g_sessionLiveSeconds;
@@ -1612,6 +1614,7 @@ static void handleAppIcon() { server.send_P(200, "image/svg+xml", APP_ICON_SVG);
 
 static void handleStatus() {
   auto m = pilot_get();
+  uint32_t nowMs = millis();
 
   float ia = safeFinite(current_sensor_get_irms_a());
   float ib = safeFinite(current_sensor_get_irms_b());
@@ -1648,7 +1651,11 @@ static void handleStatus() {
 
   int alarmLv = 0;
   const char* alarmTxt = "Sistem normal";
-  if (m.stateStable == "E" || m.stateStable == "F") {
+  bool manualStopAlertOn = (g_manualStopAlertUntilMs != 0 && ((int32_t)(g_manualStopAlertUntilMs - nowMs) > 0));
+  if (manualStopAlertOn) {
+    alarmLv = 2;
+    alarmTxt = "Sarj manuel durduruldu";
+  } else if (m.stateStable == "E" || m.stateStable == "F") {
     alarmLv = 2;
     alarmTxt = "Pilot hata durumu";
   } else if (iMax > (g_currentLimitA + 1.0f)) {
@@ -1748,6 +1755,21 @@ static void handleChargeCmd() {
   }
   int mode = clampIntArg(server.arg("m"), 0, 2);
   g_chargeMode = mode;
+
+  // "Sarji Durdur" isteginde bir sonraki loop'u beklemeden cikislari hemen kapat.
+  if (mode == 2) {
+    g_manualStopAlertUntilMs = millis() + 10000UL;
+    g_manualStopAutoResumeAtMs = millis() + 60000UL;
+    pwmEnabled = false;
+    pwmDutyPercent = 0;
+    pilot_apply_pwm();
+    relay_force_off_now();
+    digitalWrite(ERROR_LED_PIN, HIGH);
+  } else {
+    g_manualStopAlertUntilMs = 0;
+    g_manualStopAutoResumeAtMs = 0;
+  }
+
   server.send(200, "text/plain", "OK");
 }
 
