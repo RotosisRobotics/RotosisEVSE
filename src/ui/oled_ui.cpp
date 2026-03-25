@@ -13,6 +13,8 @@ static U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(
 static bool oledAvailable = false;
 static uint8_t oledAddress = 0;
 static const float kPhaseOnThresholdA = 0.90f;
+static const uint32_t kStateBlinkMs = 800;
+static const uint32_t kErrorBlinkMs = 500;
 
 static bool probe_oled_addr(uint8_t addr)
 {
@@ -30,7 +32,7 @@ static const char* ui_state_label(const String& stateStable)
   if (stateStable == "A") return "ARAC YOK";
   if (stateStable == "B") return "HAZIR";
   if (stateStable == "C") return "SARJ";
-  if (stateStable == "D") return "HAVALANDIR";
+  if (stateStable == "D") return "SARJ";
   if (stateStable == "E" || stateStable == "F") return "HATA";
   return "DURUM";
 }
@@ -95,14 +97,14 @@ static void draw_centered_text(int y, const char* text)
   u8g2.drawStr(x, y, text);
 }
 
-static void draw_status_badge(int x, const char* text, bool active)
+static void draw_state_box(int x, const char* text, bool active, bool blinkOn)
 {
   const int y = 1;
   const int w = 10;
   const int h = 10;
   u8g2.setFont(u8g2_font_5x7_tf);
 
-  if (active) {
+  if (active && blinkOn) {
     u8g2.drawRBox(x, y, w, h, 2);
     u8g2.setDrawColor(0);
   } else {
@@ -115,22 +117,46 @@ static void draw_status_badge(int x, const char* text, bool active)
   u8g2.setDrawColor(1);
 }
 
-static void draw_header(const String& stateStable,
-                        bool staConnected,
-                        bool cableConnected,
-                        bool relayOn)
+static void draw_state_strip(const String& stateStable)
+{
+  const bool blinkOn = ((millis() / kStateBlinkMs) % 2U) == 0U;
+
+  draw_state_box(88, "A", stateStable == "A", blinkOn);
+  draw_state_box(98, "B", stateStable == "B", blinkOn);
+  draw_state_box(108, "C", stateStable == "C", blinkOn);
+  draw_state_box(118, "D", stateStable == "D", blinkOn);
+}
+
+static void draw_header(const String& stateStable)
 {
   u8g2.setFont(u8g2_font_6x10_tf);
   u8g2.drawStr(2, 9, ui_state_label(stateStable));
-  draw_status_badge(94, "W", staConnected);
-  draw_status_badge(106, "K", cableConnected);
-  draw_status_badge(118, "R", relayOn);
+  draw_state_strip(stateStable);
   u8g2.drawHLine(0, 12, 128);
 }
 
 static void draw_main_panel(const String& stateStable, float ia, float ib, float ic)
 {
+  const bool errorState = is_error_state(stateStable);
   const bool charging = (stateStable == "C" || stateStable == "D");
+
+  if (errorState) {
+    const bool blinkOn = ((millis() / kErrorBlinkMs) % 2U) == 0U;
+    if (blinkOn) {
+      u8g2.drawRBox(0, 16, 128, 27, 3);
+      u8g2.setDrawColor(0);
+    } else {
+      u8g2.drawRFrame(0, 16, 128, 27, 3);
+    }
+
+    u8g2.setFont(u8g2_font_7x13B_tf);
+    draw_centered_text(30, "HATA");
+    u8g2.setFont(u8g2_font_6x10_tf);
+    draw_centered_text(41, "Sarj durdu");
+    u8g2.setDrawColor(1);
+    return;
+  }
+
   u8g2.drawRFrame(0, 16, 128, 27, 3);
 
   if (charging) {
@@ -138,17 +164,17 @@ static void draw_main_panel(const String& stateStable, float ia, float ib, float
     float currentA = display_current(ia, ib, ic);
     snprintf(currentText, sizeof(currentText), "%.1f", currentA);
 
-    u8g2.setFont(u8g2_font_6x10_tf);
-    draw_centered_text(26, (stateStable == "D") ? "HAVALANDIRMA" : "SARJ DEVAM");
+    u8g2.setFont(u8g2_font_5x7_tf);
+    draw_centered_text(23, "SARJ OLUYOR");
 
     u8g2.setFont(u8g2_font_logisoso18_tn);
     int valueWidth = u8g2.getStrWidth(currentText);
     int valueX = (128 - valueWidth - 12) / 2;
     if (valueX < 4) valueX = 4;
-    u8g2.drawStr(valueX, 41, currentText);
+    u8g2.drawStr(valueX, 42, currentText);
 
     u8g2.setFont(u8g2_font_7x13B_tf);
-    u8g2.drawStr(valueX + valueWidth + 3, 39, "A");
+    u8g2.drawStr(valueX + valueWidth + 3, 40, "A");
   } else {
     u8g2.setFont(u8g2_font_7x13B_tf);
     draw_centered_text(31, ui_idle_title(stateStable));
@@ -221,7 +247,7 @@ void oled_draw(const String& stateStable,
   if (!oledAvailable) return;
 
   u8g2.clearBuffer();
-  draw_header(stateStable, staConnected, cableConnected, relayOn);
+  draw_header(stateStable);
   draw_main_panel(stateStable, ia, ib, ic);
   draw_metrics(ia, ib, ic, powerW, energyKwh, chargeSeconds);
 
