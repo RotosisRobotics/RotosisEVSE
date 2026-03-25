@@ -7,7 +7,7 @@
 #include "io/relay.h"
 #include "net/web_ui.h"
 #include "ui/oled_ui.h"
-#include "io/current_sensor.h" // YENİ: Akım sensörü kütüphanesi eklendi
+#include "io/current_sensor.h"
 
 // Bu dosya projenin merkez akisidir.
 // Neyi nereden degistirecegini hizli bulmak icin:
@@ -19,7 +19,6 @@
 // - web panel ve API: src/net/web_ui.cpp
 
 // CP yorumlama ayarlari. Web panelinden de guncellenebilir.
-// web’den değişebilir
 float CP_DIVIDER_RATIO = 4.62f;
 float TH_A_MIN = 11.0f;
 float TH_B_MIN = 9.6f;
@@ -29,7 +28,7 @@ float TH_E_MIN = 1.0f;
 float marginUp = 0.30f;
 float marginDown = 0.30f;
 int   stableCount = 3;
-int   loopIntervalMs = 200; // Varsayılan ölçüm hızı 200ms
+int   loopIntervalMs = 200; // Varsayilan olcum hizi 200 ms
 
 float g_powerW = 0.0f;
 float g_energyKWh = 0.0f;
@@ -37,7 +36,7 @@ uint32_t g_chargeSeconds = 0;
 int g_phaseCount = 1;
 float g_currentLimitA = 32.0f;
 
-// Hızlı kontrol modu: 0=AUTO, 1=START, 2=STOP
+// Hizli kontrol modu: 0=AUTO, 1=START, 2=STOP
 int g_chargeMode = 0;
 uint32_t g_manualStopAlertUntilMs = 0;
 uint32_t g_manualStopAutoResumeAtMs = 0;
@@ -48,7 +47,7 @@ uint32_t g_sessionLiveStartSec = 0;
 uint32_t g_sessionLiveSeconds = 0;
 float g_sessionLiveEnergyKWh = 0.0f;
 
-// Son seanslar (cihaz açık kaldığı sürece tutulur)
+// Son seanslar cihaz acik kaldigi surece RAM'de tutulur.
 uint32_t g_histStartSec[20] = {0};
 uint32_t g_histDurationSec[20] = {0};
 float g_histEnergyKWh[20] = {0.0f};
@@ -81,6 +80,8 @@ void resetHistoryData()
 
 void resetChargeData(bool clearHistory)
 {
+  // Anlik enerji ve aktif seans verilerini sifirlar.
+  // Web tarafindaki "simdi sifirla" akisi burayi kullanir.
   energyWh = 0.0f;
   lastEnergyMs = 0;
   chargeAccumMs = 0;
@@ -118,7 +119,7 @@ static void applyPwmIfChanged()
   }
 }
 
-// IEC 61851 yaklaşık dönüşüm (Teorik akım limiti hesabı)
+// IEC 61851 duty -> akim limiti yaklasimi.
 static float duty_to_amps(int dutyPercent)
 {
   if (dutyPercent <= 0) return 0.0f;
@@ -155,10 +156,10 @@ void setup()
   // OLED
   oled_init();
 
-  // YENİ: Akım Sensörünü Başlat
+  // Akim sensoru
   current_sensor_init();
 
-  // Röle
+  // Role
   relay_init();
   relay_set_auto_enabled(true);
   relay_set_min_switch_ms(100);   // C<->B testleri için
@@ -168,7 +169,7 @@ void setup()
   // Pilot
   pilot_init();
 
-  // PWM başlangıç
+  // Ilk PWM durumu
   pwmDutyPercent = PWM_DUTY_32A;  // örn: 53
   pwmEnabled = false;            // boot'ta A kabul, PWM kapalı
   applyPwmIfChanged();
@@ -183,10 +184,10 @@ void loop()
   // 4) ekran ve LED guncellemesi
   // 5) PWM ve role kararinin uygulanmasi
 
-  // Web sunucu döngüsü
+  // Web sunucu dongusu
   web_loop();
 
-  // YENİ: Akım sensörü döngüsü (Sürekli çalışmalı)
+  // Akim sensoru dongusu
   current_sensor_loop();
 
   static uint32_t last = 0;

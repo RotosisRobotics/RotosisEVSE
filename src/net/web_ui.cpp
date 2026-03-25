@@ -334,6 +334,7 @@ static void noteResetEvent(bool clearNow, bool clearHistory) {
   saveResetStats();
 }
 
+// 2) Sayfaya gomulu on yuz kaynaklari burada baslar.
 static const char USER_HTML[] PROGMEM = R"HTML(
 <!DOCTYPE html><html><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1614,6 +1615,9 @@ static void setupWiFi() {
   Serial.println("[WiFi] Kendi AP yayini kapali.");
   refreshMdns();
 }
+
+// 3) HTTP handler'lari.
+// Her endpoint kendi verisini veya komutunu burada uretir.
 static void handleRoot() { server.send_P(200, "text/html", USER_HTML); }
 static void handleAdmin() {
   if (!requireAdminAuth()) return;
@@ -1871,7 +1875,7 @@ static void handlePulseSet() {
 }
 
 
-
+// 4) Route kayitlari ve servis baslatma.
 void web_init() {
   // Boot sirasinda ag, OTA, route ve web server bu noktada ayaga kalkar.
   setupWiFi();
