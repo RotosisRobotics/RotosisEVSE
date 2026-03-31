@@ -1582,6 +1582,8 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
     <div class="sep"></div>
     <h2>OTA Teshis</h2>
     <div class="kv"><div class="k">FW / Remote</div><div class="v mono"><span id="otaCurVer">-</span> / <span id="otaRemoteVer">-</span></div></div>
+    <div class="kv"><div class="k">Calisan Bolum</div><div class="v mono"><span id="otaPart">-</span></div></div>
+    <div class="kv"><div class="k">Image State</div><div class="v mono"><span id="otaImgState">-</span></div></div>
     <div class="kv"><div class="k">Durum</div><div class="v mono"><span id="otaStatus">-</span></div></div>
     <div class="kv"><div class="k">Son Kontrol</div><div class="v mono"><span id="otaAge">-</span></div></div>
     <div class="kv"><div class="k">Hata</div><div class="v mono"><span id="otaError">Hata yok</span></div></div>
@@ -1655,6 +1657,8 @@ function pull(force=false){
     if(d.rstLastSec !== undefined) document.getElementById('rstLastSec').textContent = d.rstLastSec;
     if(d.otaCur !== undefined) document.getElementById('otaCurVer').textContent = d.otaCur;
     if(d.otaRemote !== undefined) document.getElementById('otaRemoteVer').textContent = d.otaRemote;
+    if(d.otaPart !== undefined) document.getElementById('otaPart').textContent = d.otaPart;
+    if(d.otaImgState !== undefined) document.getElementById('otaImgState').textContent = d.otaImgState;
     if(d.otaStatus !== undefined) document.getElementById('otaStatus').textContent = d.otaStatus;
     if(d.otaAgeMs !== undefined) document.getElementById('otaAge').textContent = fmtOtaAge(d.otaAgeMs);
     if(d.otaErr !== undefined) document.getElementById('otaError').textContent = d.otaErr && d.otaErr.length ? d.otaErr : 'Hata yok';
@@ -1811,6 +1815,8 @@ static void handleStatus() {
   bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
   const char* otaCurrent = OTA_Manager::currentVersion();
   const char* otaRemote = OTA_Manager::lastRemoteVersion();
+  const char* otaPart = OTA_Manager::runningPartitionLabel();
+  const char* otaImgState = OTA_Manager::runningImageStateLabel();
   const char* otaStatus = OTA_Manager::lastStatusText();
   const char* otaError = OTA_Manager::lastErrorText();
   uint32_t otaAgeMs = OTA_Manager::lastCheckAgeMs();
@@ -1837,7 +1843,7 @@ static void handleStatus() {
     alarmTxt = "Wi-Fi baglantisi yok";
   }
 
-  char json[2304];
+  char json[2560];
   snprintf(
     json, sizeof(json),
     "{\"lInt\":%d,\"onD\":%lu,\"offD\":%lu,\"stable\":%d,"
@@ -1847,7 +1853,7 @@ static void handleStatus() {
     "\"wifiSsid\":\"%s\",\"wifiLoc\":\"%s\",\"ip\":\"%s\",\"host\":\"%s\","
     "\"state\":\"%s\",\"div\":%.3f,\"thb\":%.2f,\"thc\":%.2f,\"thd\":%.2f,\"the\":%.2f,"
     "\"modeId\":%d,\"mode\":\"%s\",\"limitA\":%.1f,\"staOk\":%d,"
-    "\"otaCur\":\"%s\",\"otaRemote\":\"%s\",\"otaStatus\":\"%s\",\"otaErr\":\"%s\",\"otaAgeMs\":%lu,"
+    "\"otaCur\":\"%s\",\"otaRemote\":\"%s\",\"otaPart\":\"%s\",\"otaImgState\":\"%s\",\"otaStatus\":\"%s\",\"otaErr\":\"%s\",\"otaAgeMs\":%lu,"
     "\"alarmLv\":%d,\"alarmTxt\":\"%s\","
     "\"sLive\":%d,\"sLiveStart\":%lu,\"sLiveSec\":%lu,\"sLiveKWh\":%.3f,"
     "\"rstTotal\":%lu,\"rstNow\":%lu,\"rstHist\":%lu,\"rstLastSec\":%lu,\"rstLastMode\":\"%s\"}",
@@ -1875,6 +1881,8 @@ static void handleStatus() {
     staOk ? 1 : 0,
     otaCurrent,
     otaRemote,
+    otaPart,
+    otaImgState,
     otaStatus,
     otaError,
     (unsigned long)otaAgeMs,

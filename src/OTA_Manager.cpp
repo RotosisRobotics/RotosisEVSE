@@ -57,6 +57,38 @@ struct Manifest {
   uint32_t size = 0;
 };
 
+static const char* partitionSubtypeLabel(esp_partition_subtype_t subtype) {
+  switch (subtype) {
+    case ESP_PARTITION_SUBTYPE_APP_FACTORY:
+      return "factory";
+    case ESP_PARTITION_SUBTYPE_APP_OTA_0:
+      return "ota_0";
+    case ESP_PARTITION_SUBTYPE_APP_OTA_1:
+      return "ota_1";
+    default:
+      return "other";
+  }
+}
+
+static const char* imageStateLabel(esp_ota_img_states_t state) {
+  switch (state) {
+    case ESP_OTA_IMG_NEW:
+      return "new";
+    case ESP_OTA_IMG_PENDING_VERIFY:
+      return "pending_verify";
+    case ESP_OTA_IMG_VALID:
+      return "valid";
+    case ESP_OTA_IMG_INVALID:
+      return "invalid";
+    case ESP_OTA_IMG_ABORTED:
+      return "aborted";
+    case ESP_OTA_IMG_UNDEFINED:
+      return "undefined";
+    default:
+      return "unknown";
+  }
+}
+
 static bool wifiReady() {
   return WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0;
 }
@@ -582,6 +614,22 @@ const char* lastErrorText() {
 uint32_t lastCheckAgeMs() {
   if (ctx.lastCheckMs == 0) return 0;
   return millis() - ctx.lastCheckMs;
+}
+
+const char* runningPartitionLabel() {
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  if (!running) return "missing";
+  return partitionSubtypeLabel(running->subtype);
+}
+
+const char* runningImageStateLabel() {
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  if (!running) return "partition_missing";
+
+  esp_ota_img_states_t state;
+  esp_err_t err = esp_ota_get_state_partition(running, &state);
+  if (err != ESP_OK) return "state_unavailable";
+  return imageStateLabel(state);
 }
 
 }  // namespace OTA_Manager

@@ -63,6 +63,42 @@ static void handleForceFactoryByButton() {
   }
 }
 
+static void pollForceFactoryByButtonRuntime() {
+  static bool pressActive = false;
+  static bool holdHandled = false;
+  static uint32_t pressStartMs = 0;
+
+  bool pressed = (digitalRead(kForceFactoryPin) == LOW);
+  if (!pressed) {
+    pressActive = false;
+    holdHandled = false;
+    pressStartMs = 0;
+    return;
+  }
+
+  if (!pressActive) {
+    pressActive = true;
+    holdHandled = false;
+    pressStartMs = millis();
+    return;
+  }
+
+  if (holdHandled || (millis() - pressStartMs) < kForceFactoryHoldMs) return;
+  holdHandled = true;
+
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  if (running && running->subtype == ESP_PARTITION_SUBTYPE_APP_FACTORY) {
+    Serial.println("[BOOTCTL] Runtime GPIO0 hold algilandi ama zaten factory partitionda");
+    return;
+  }
+
+  if (switchBootToFactory()) {
+    Serial.println("[BOOTCTL] Runtime GPIO0 hold ile FACTORY secildi, yeniden baslatiliyor.");
+    delay(100);
+    esp_restart();
+  }
+}
+
 static void handleRescueFallbackIfNeeded() {
   Preferences prefs;
   if (!prefs.begin("bootctl", false)) return;
@@ -277,6 +313,8 @@ void loop()
     esp_restart();
   }
 #endif
+
+  pollForceFactoryByButtonRuntime();
 
   // Web sunucu dongusu
   web_loop();

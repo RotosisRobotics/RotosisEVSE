@@ -28,6 +28,7 @@ const char* lastRemoteVersion();
 const char* lastStatusText();
 const char* lastErrorText();
 uint32_t lastCheckAgeMs();
+const char* runningPartitionLabel();
+const char* runningImageStateLabel();
 
 }  // namespace OTA_Manager
-
