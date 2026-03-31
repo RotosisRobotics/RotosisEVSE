@@ -7,6 +7,8 @@ param(
 
     [string]$TargetName = "uzaktanotali.bin",
 
+    [string]$HealthUrl = "",
+
     [switch]$Push
 )
 
@@ -27,9 +29,17 @@ if (!(Test-Path -LiteralPath $firmwareDir)) {
 
 Copy-Item -LiteralPath $BinPath -Destination $targetBin -Force
 
+$sizeBytes = (Get-Item -LiteralPath $targetBin).Length
+$sha256 = (Get-FileHash -LiteralPath $targetBin -Algorithm SHA256).Hash.ToLowerInvariant()
+
 $manifest = [ordered]@{
     version = $Version
     url = "https://raw.githubusercontent.com/turgaycam/evseyedek/main/firmware/$TargetName"
+    size = [uint32]$sizeBytes
+    sha256 = $sha256
+}
+if (![string]::IsNullOrWhiteSpace($HealthUrl)) {
+    $manifest.health_url = $HealthUrl
 }
 
 $manifest | ConvertTo-Json | Set-Content -LiteralPath $versionJson -Encoding utf8
@@ -38,6 +48,11 @@ Write-Host "Hazir:"
 Write-Host "BIN: $targetBin"
 Write-Host "Version: $Version"
 Write-Host "URL: $($manifest.url)"
+Write-Host "Size: $($manifest.size)"
+Write-Host "SHA256: $($manifest.sha256)"
+if ($manifest.Contains("health_url")) {
+    Write-Host "Health URL: $($manifest.health_url)"
+}
 
 if ($Push) {
     Push-Location $projectRoot

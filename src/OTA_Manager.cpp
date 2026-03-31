@@ -8,8 +8,6 @@
 #include <esp_ota_ops.h>
 #include <mbedtls/sha256.h>
 
-#include "net/web_ui.h"
-
 namespace {
 struct OtaContext {
   String manifestUrl;
@@ -345,7 +343,7 @@ static void handleRollbackGuard() {
     ctx.verifyHeartbeatResolved = true;
   }
 
-  if (wifiReady() && web_ready_for_ota_validation() && sendHeartbeat(ctx.verifyHeartbeatUrl)) {
+  if (wifiReady() && sendHeartbeat(ctx.verifyHeartbeatUrl)) {
     markRunningAppValid();
     return;
   }
