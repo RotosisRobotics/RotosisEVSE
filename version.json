@@ -1,7 +1,5 @@
 {
     "version": "1.1.2",
     "url": "https://raw.githubusercontent.com/turgaycam/evseyedek/main/firmware/uzaktanotali.bin",
-    "size": 1290944,
-    "sha256": "f8066a03110292fcde6cbbf597135d57a8ae7993dc59dc5b5a65c9905d8e0fd9",
     "health_url": "https://example.invalid/health"
 }
