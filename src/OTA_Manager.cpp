@@ -11,6 +11,9 @@ namespace {
 struct OtaContext {
   String manifestUrl;
   String sha1Fingerprint;
+  String lastRemoteVersion;
+  String lastStatus;
+  String lastError;
   uint32_t checkIntervalMs = 0;
   uint32_t lastCheckMs = 0;
   bool checkRequested = false;
@@ -89,6 +92,8 @@ static bool parseManifest(const String& payload, Manifest& out) {
 
 static bool fetchManifest(Manifest& out) {
   if (ctx.manifestUrl.isEmpty()) {
+    ctx.lastStatus = "manifest_url_missing";
+    ctx.lastError = "Manifest URL tanimli degil";
     Serial.println("[OTA] Manifest URL tanimli degil");
     return false;
   }
@@ -102,12 +107,16 @@ static bool fetchManifest(Manifest& out) {
 
   Serial.printf("[OTA] Manifest GET: %s\n", ctx.manifestUrl.c_str());
   if (!http.begin(client, ctx.manifestUrl)) {
+    ctx.lastStatus = "manifest_begin_failed";
+    ctx.lastError = "HTTP baslatilamadi";
     Serial.println("[OTA] HTTP baslatilamadi");
     return false;
   }
 
   int code = http.GET();
   if (code != HTTP_CODE_OK) {
+    ctx.lastStatus = "manifest_http_error";
+    ctx.lastError = String("Manifest HTTP ") + code;
     Serial.printf("[OTA] Manifest indirilemedi, HTTP %d\n", code);
     http.end();
     return false;
@@ -115,7 +124,15 @@ static bool fetchManifest(Manifest& out) {
 
   String payload = http.getString();
   http.end();
-  return parseManifest(payload, out);
+  if (!parseManifest(payload, out)) {
+    ctx.lastStatus = "manifest_parse_failed";
+    ctx.lastError = "Manifest parse hatasi";
+    return false;
+  }
+  ctx.lastRemoteVersion = out.version;
+  ctx.lastStatus = "manifest_ok";
+  ctx.lastError = "";
+  return true;
 }
 
 static bool performUpdate(const String& url) {
@@ -128,14 +145,20 @@ static bool performUpdate(const String& url) {
 
   switch (ret) {
     case HTTP_UPDATE_FAILED:
+      ctx.lastStatus = "update_failed";
+      ctx.lastError = httpUpdate.getLastErrorString();
       Serial.printf("[OTA] Update HATA: %s (code %d)\n",
                     httpUpdate.getLastErrorString().c_str(),
                     httpUpdate.getLastError());
       return false;
     case HTTP_UPDATE_NO_UPDATES:
+      ctx.lastStatus = "no_updates";
+      ctx.lastError = "";
       Serial.println("[OTA] Yeni surum yok (HTTP_UPDATE_NO_UPDATES)");
       return true;
     case HTTP_UPDATE_OK:
+      ctx.lastStatus = "update_ok";
+      ctx.lastError = "";
       Serial.println("[OTA] Update indirildi, reboot ediliyor..." );
       return true;
   }
@@ -150,6 +173,8 @@ static void handleUpdateCheck() {
 
   ctx.checkRequested = false;
   ctx.lastCheckMs = millis();
+  ctx.lastStatus = "checking";
+  ctx.lastError = "";
 
   Manifest m;
   if (!fetchManifest(m)) return;
@@ -157,9 +182,11 @@ static void handleUpdateCheck() {
   int cmp = compareVersionTokens(m.version, CURRENT_VERSION);
   Serial.printf("[OTA] Surumler: remote=%s local=%s cmp=%d\n", m.version.c_str(), CURRENT_VERSION, cmp);
   if (cmp > 0) {
+    ctx.lastStatus = "update_available";
     Serial.printf("[OTA] Yeni surum bulunuyor -> %s\n", m.url.c_str());
     ctx.lastUpdateOk = performUpdate(m.url);
   } else {
+    ctx.lastStatus = "up_to_date";
     Serial.println("[OTA] Cihaz guncel");
     ctx.lastUpdateOk = true;
   }
@@ -196,6 +223,9 @@ void begin(const char* manifestUrl, uint32_t checkIntervalMs, const char* sha1Fi
   ctx.bootMs = millis();
   ctx.lastUpdateOk = false;
   ctx.markedValid = false;
+  ctx.lastRemoteVersion = "-";
+  ctx.lastStatus = "boot";
+  ctx.lastError = "";
 
   const esp_partition_t* running = esp_ota_get_running_partition();
   esp_ota_img_states_t state;
@@ -223,6 +253,23 @@ const char* currentVersion() {
 
 bool lastUpdateSucceeded() {
   return ctx.lastUpdateOk;
+}
+
+const char* lastRemoteVersion() {
+  return ctx.lastRemoteVersion.c_str();
+}
+
+const char* lastStatusText() {
+  return ctx.lastStatus.c_str();
+}
+
+const char* lastErrorText() {
+  return ctx.lastError.c_str();
+}
+
+uint32_t lastCheckAgeMs() {
+  if (ctx.lastCheckMs == 0) return 0;
+  return millis() - ctx.lastCheckMs;
 }
 
 }  // namespace OTA_Manager

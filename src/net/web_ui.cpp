@@ -11,6 +11,7 @@
 
 #include "app_config.h"
 #include "app_pins.h"
+#include "OTA_Manager.h"
 #include "pilot/pilot.h"
 #include "io/relay.h"
 
@@ -1107,7 +1108,13 @@ body.state-D .stateGlyph{
     <div class="meta">
       <div class="metaLine" id="wifiLine">Wi-Fi: -</div>
       <div class="metaLine"><span id="host">-</span> | <span id="ip">-</span></div>
+      <div class="metaLine">FW: <span id="otaCurVer">-</span> | Remote: <span id="otaRemoteVer">-</span></div>
+      <div class="metaLine">OTA: <span id="otaStatus">-</span> | Son kontrol: <span id="otaAge">-</span></div>
+      <div class="metaLine muted" id="otaError">Hata yok</div>
       <div class="metaLine muted" id="ts">-</div>
+      <div class="heroMiniRow" style="margin-top:10px">
+        <button class="sync" style="width:100%" onclick="runOtaCheck()">OTA Simdi Kontrol Et</button>
+      </div>
     </div>
   </section>
 </div>
@@ -1229,6 +1236,17 @@ function renderAlarm(level,text,state,staOk){
   setText("alarmText",text||"Sistem normal");
   setText("alarmMeta","Durum kodu "+state+" | "+(staOk?"Wi-Fi ba\u011fl\u0131":"Wi-Fi yok"));
 }
+function fmtAge(ms){
+  const sec=Math.max(0,Math.round((Number(ms)||0)/1000));
+  if(sec===0) return "hemen simdi";
+  if(sec<60) return sec+" sn once";
+  const min=Math.floor(sec/60);
+  const rem=sec%60;
+  return min+" dk "+rem+" sn once";
+}
+function runOtaCheck(){
+  fetch('/ota_check',{cache:'no-store'}).then(()=>setText('otaStatus','check_requested')).catch(()=>setText('otaStatus','check_request_failed'));
+}
 function pull(){
   fetch('/status',{cache:'no-store'}).then(r=>r.json()).then(d=>{
     const ia=Number(d.ia)||0, ib=Number(d.ib)||0, ic=Number(d.ic)||0;
@@ -1260,6 +1278,11 @@ function pull(){
     if(d.state!==undefined) updateState(d.state);
     if(d.ip!==undefined) setText('ip',d.ip);
     if(d.host!==undefined) setText('host',d.host);
+    if(d.otaCur!==undefined) setText('otaCurVer',d.otaCur);
+    if(d.otaRemote!==undefined) setText('otaRemoteVer',d.otaRemote);
+    if(d.otaStatus!==undefined) setText('otaStatus',d.otaStatus);
+    if(d.otaAgeMs!==undefined) setText('otaAge',fmtAge(d.otaAgeMs));
+    if(d.otaErr!==undefined) setText('otaError',d.otaErr || "Hata yok");
     setGauge(loadPct);
     setText('ts',"Son g\u00fcncelleme: "+new Date().toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));
     const wifiText=(d.wifiSsid&&d.wifiSsid!=="-") ? ("Wi-Fi: "+d.wifiSsid+((d.wifiLoc&&d.wifiLoc!=="-")?" / "+d.wifiLoc:"")) : "Wi-Fi: ba\u011fl\u0131 de\u011fil";
@@ -1651,6 +1674,10 @@ static void handlePing() { server.send(200, "text/plain", "OK"); }
 static void handleManifest() { server.send_P(200, "application/manifest+json", MANIFEST_JSON); }
 static void handleServiceWorker() { server.send_P(200, "application/javascript", SERVICE_WORKER_JS); }
 static void handleAppIcon() { server.send_P(200, "image/svg+xml", APP_ICON_SVG); }
+static void handleOtaCheck() {
+  OTA_Manager::triggerCheckNow();
+  server.send(200, "application/json", "{\"ok\":1}");
+}
 
 // Status endpoint'i kullanici panelinin ana veri kaynagidir.
 static void handleStatus() {
@@ -1684,6 +1711,11 @@ static void handleStatus() {
   String ipStr = "-";
   String hostStr = String(kHostName) + ".local";
   bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
+  const char* otaCurrent = OTA_Manager::currentVersion();
+  const char* otaRemote = OTA_Manager::lastRemoteVersion();
+  const char* otaStatus = OTA_Manager::lastStatusText();
+  const char* otaError = OTA_Manager::lastErrorText();
+  uint32_t otaAgeMs = OTA_Manager::lastCheckAgeMs();
   if (staOk) {
     wifiSsid = WiFi.SSID();
     wifiLoc = wifiLocationForSsid(wifiSsid);
@@ -1707,7 +1739,7 @@ static void handleStatus() {
     alarmTxt = "Wi-Fi baglantisi yok";
   }
 
-  char json[1440];
+  char json[1792];
   snprintf(
     json, sizeof(json),
     "{\"lInt\":%d,\"onD\":%lu,\"offD\":%lu,\"stable\":%d,"
@@ -1717,6 +1749,7 @@ static void handleStatus() {
     "\"wifiSsid\":\"%s\",\"wifiLoc\":\"%s\",\"ip\":\"%s\",\"host\":\"%s\","
     "\"state\":\"%s\",\"div\":%.3f,\"thb\":%.2f,\"thc\":%.2f,\"thd\":%.2f,\"the\":%.2f,"
     "\"modeId\":%d,\"mode\":\"%s\",\"limitA\":%.1f,\"staOk\":%d,"
+    "\"otaCur\":\"%s\",\"otaRemote\":\"%s\",\"otaStatus\":\"%s\",\"otaErr\":\"%s\",\"otaAgeMs\":%lu,"
     "\"alarmLv\":%d,\"alarmTxt\":\"%s\","
     "\"sLive\":%d,\"sLiveStart\":%lu,\"sLiveSec\":%lu,\"sLiveKWh\":%.3f,"
     "\"rstTotal\":%lu,\"rstNow\":%lu,\"rstHist\":%lu,\"rstLastSec\":%lu,\"rstLastMode\":\"%s\"}",
@@ -1742,6 +1775,11 @@ static void handleStatus() {
     chargeModeLabel(g_chargeMode),
     safeFinite(g_currentLimitA),
     staOk ? 1 : 0,
+    otaCurrent,
+    otaRemote,
+    otaStatus,
+    otaError,
+    (unsigned long)otaAgeMs,
     alarmLv,
     alarmTxt,
     g_sessionLive ? 1 : 0,
@@ -1921,6 +1959,7 @@ void web_init() {
   server.on("/manifest.json", HTTP_GET, handleManifest);
   server.on("/sw.js", HTTP_GET, handleServiceWorker);
   server.on("/app-icon.svg", HTTP_GET, handleAppIcon);
+  server.on("/ota_check", HTTP_GET, handleOtaCheck);
   // Captive portal probe endpoints (Android/iOS/Windows)
   server.on("/generate_204", HTTP_GET, handleRoot);
   server.on("/hotspot-detect.html", HTTP_GET, handleRoot);

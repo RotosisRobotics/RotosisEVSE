@@ -23,6 +23,10 @@ void triggerCheckNow();
 // Son bilinen durum ve versiyonlar.
 const char* currentVersion();
 bool lastUpdateSucceeded();
+const char* lastRemoteVersion();
+const char* lastStatusText();
+const char* lastErrorText();
+uint32_t lastCheckAgeMs();
 
 }  // namespace OTA_Manager
 
