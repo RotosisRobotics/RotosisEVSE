@@ -1,7 +1,9 @@
 #include "current_sensor.h"
 #include "app_pins.h"
 #include "EmonLib.h"
+#include <Preferences.h>
 #include <Arduino.h>
+#include <math.h>
 
 // Akim sensor modulu.
 // Yeni CT karti veya farkli kalibrasyon gelirse ilk mudahale edilecek yer burasidir.
@@ -9,6 +11,27 @@
 static EnergyMonitor emonA;
 static EnergyMonitor emonB;
 static EnergyMonitor emonC;
+static Preferences s_calPrefs;
+static bool s_calPrefsReady = false;
+static constexpr float kDefaultCalA = 12.0f; // fine-tune: 23.17 / 23.7
+static constexpr float kDefaultCalB = 12.0f; // fine-tune: 25.17 / 25.6
+static constexpr float kDefaultCalC = 12.0f; // fine-tune: 24.28 / 24.7
+static constexpr float kMinIcal = 1.0f;
+static constexpr float kMaxIcal = 80.0f;
+static constexpr float kMinOff = -10.0f;
+static constexpr float kMaxOff = 10.0f;
+static constexpr uint32_t kCalMagic = 0x43414C31; // "CAL1"
+static constexpr uint16_t kCalVersion = 2;
+
+static float s_calA = kDefaultCalA;
+static float s_calB = kDefaultCalB;
+static float s_calC = kDefaultCalC;
+static float s_offA = 0.0f;
+static float s_offB = 0.0f;
+static float s_offC = 0.0f;
+static bool s_enA = true;
+static bool s_enB = true;
+static bool s_enC = true;
 static float last_irms_a = 0.0f;
 static float last_irms_b = 0.0f;
 static float last_irms_c = 0.0f;
@@ -18,6 +41,78 @@ static float noise_floor_c = 0.0f;
 static bool phase_active_a = false;
 static bool phase_active_b = false;
 static bool phase_active_c = false;
+
+struct CalStore {
+    uint32_t magic;
+    uint16_t version;
+    float calA;
+    float calB;
+    float calC;
+    float offA;
+    float offB;
+    float offC;
+    uint8_t enA;
+    uint8_t enB;
+    uint8_t enC;
+    uint8_t reserved;
+};
+
+static void apply_calibration() {
+    emonA.current(CURRENT_SENSOR_PIN_A, s_calA);
+    emonB.current(CURRENT_SENSOR_PIN_B, s_calB);
+    emonC.current(CURRENT_SENSOR_PIN_C, s_calC);
+}
+
+static void save_calibration_nvs() {
+    if (!s_calPrefsReady) return;
+    CalStore data{};
+    data.magic = kCalMagic;
+    data.version = kCalVersion;
+    data.calA = s_calA;
+    data.calB = s_calB;
+    data.calC = s_calC;
+    data.offA = s_offA;
+    data.offB = s_offB;
+    data.offC = s_offC;
+    data.enA = s_enA ? 1 : 0;
+    data.enB = s_enB ? 1 : 0;
+    data.enC = s_enC ? 1 : 0;
+    s_calPrefs.putBytes("iCal", &data, sizeof(data));
+}
+
+static bool valid_cal(const CalStore& d) {
+    return (d.magic == kCalMagic) &&
+           (d.version == kCalVersion) &&
+           isfinite(d.calA) && isfinite(d.calB) && isfinite(d.calC) &&
+           isfinite(d.offA) && isfinite(d.offB) && isfinite(d.offC) &&
+           d.calA >= kMinIcal && d.calA <= kMaxIcal &&
+           d.calB >= kMinIcal && d.calB <= kMaxIcal &&
+           d.calC >= kMinIcal && d.calC <= kMaxIcal &&
+           d.offA >= kMinOff && d.offA <= kMaxOff &&
+           d.offB >= kMinOff && d.offB <= kMaxOff &&
+           d.offC >= kMinOff && d.offC <= kMaxOff &&
+           d.enA <= 1 && d.enB <= 1 && d.enC <= 1;
+}
+
+static void load_calibration_nvs() {
+    if (!s_calPrefsReady) return;
+    CalStore data{};
+    size_t got = s_calPrefs.getBytes("iCal", &data, sizeof(data));
+    if (got == sizeof(data) && valid_cal(data)) {
+        s_calA = data.calA;
+        s_calB = data.calB;
+        s_calC = data.calC;
+        s_offA = data.offA;
+        s_offB = data.offB;
+        s_offC = data.offC;
+        s_enA = data.enA != 0;
+        s_enB = data.enB != 0;
+        s_enC = data.enC != 0;
+    } else {
+        // Eski/hatali kaydi varsayilan (12/12/12) ile guncelle.
+        save_calibration_nvs();
+    }
+}
 
 // Raw Irms degerini gurultu tabani, hysteresis ve EMA ile daha okunabilir hale getirir.
 static float apply_phase_filter(float raw, float* noise_floor, bool* phase_active, float last_value) {
@@ -50,11 +145,11 @@ void current_sensor_init() {
     pinMode(CURRENT_SENSOR_PIN_B, INPUT);
     pinMode(CURRENT_SENSOR_PIN_C, INPUT);
 
+    s_calPrefsReady = s_calPrefs.begin("evsecal", false);
+    load_calibration_nvs();
+
     // Her fazin kalibrasyon katsayisi burada ayarlanir.
-    // Pens ampermetre ile karsilastirip bu degerler duzeltilir.
-    emonA.current(CURRENT_SENSOR_PIN_A, 15.01f); // fine-tune: 23.17 / 23.7
-    emonB.current(CURRENT_SENSOR_PIN_B, 15.47f); // fine-tune: 25.17 / 25.6
-    emonC.current(CURRENT_SENSOR_PIN_C, 27.69f); // fine-tune: 24.28 / 24.7
+    apply_calibration();
 
     // Baslangicta anlik gurultu seviyesini yakala.
     noise_floor_a = emonA.calcIrms(300);
@@ -73,14 +168,32 @@ void current_sensor_loop() {
 
     const int sampleCount = 500;
     if (phase_index == 0) {
-        float raw = emonA.calcIrms(sampleCount);
-        last_irms_a = apply_phase_filter(raw, &noise_floor_a, &phase_active_a, last_irms_a);
+        if (s_enA) {
+            float raw = emonA.calcIrms(sampleCount);
+            float filtered = apply_phase_filter(raw, &noise_floor_a, &phase_active_a, last_irms_a);
+            last_irms_a = filtered + s_offA;
+            if (last_irms_a < 0.0f) last_irms_a = 0.0f;
+        } else {
+            last_irms_a = 0.0f;
+        }
     } else if (phase_index == 1) {
-        float raw = emonB.calcIrms(sampleCount);
-        last_irms_b = apply_phase_filter(raw, &noise_floor_b, &phase_active_b, last_irms_b);
+        if (s_enB) {
+            float raw = emonB.calcIrms(sampleCount);
+            float filtered = apply_phase_filter(raw, &noise_floor_b, &phase_active_b, last_irms_b);
+            last_irms_b = filtered + s_offB;
+            if (last_irms_b < 0.0f) last_irms_b = 0.0f;
+        } else {
+            last_irms_b = 0.0f;
+        }
     } else {
-        float raw = emonC.calcIrms(sampleCount);
-        last_irms_c = apply_phase_filter(raw, &noise_floor_c, &phase_active_c, last_irms_c);
+        if (s_enC) {
+            float raw = emonC.calcIrms(sampleCount);
+            float filtered = apply_phase_filter(raw, &noise_floor_c, &phase_active_c, last_irms_c);
+            last_irms_c = filtered + s_offC;
+            if (last_irms_c < 0.0f) last_irms_c = 0.0f;
+        } else {
+            last_irms_c = 0.0f;
+        }
     }
 
     phase_index = (phase_index + 1) % 3;
@@ -90,3 +203,38 @@ float current_sensor_get_irms_a() { return last_irms_a; }
 float current_sensor_get_irms_b() { return last_irms_b; }
 float current_sensor_get_irms_c() { return last_irms_c; }
 float current_sensor_get_irms_total() { return last_irms_a + last_irms_b + last_irms_c; }
+
+void current_sensor_set_calibration(float calA, float calB, float calC,
+                                    float offA, float offB, float offC) {
+    s_calA = constrain(calA, kMinIcal, kMaxIcal);
+    s_calB = constrain(calB, kMinIcal, kMaxIcal);
+    s_calC = constrain(calC, kMinIcal, kMaxIcal);
+    s_offA = constrain(offA, kMinOff, kMaxOff);
+    s_offB = constrain(offB, kMinOff, kMaxOff);
+    s_offC = constrain(offC, kMinOff, kMaxOff);
+    apply_calibration();
+    save_calibration_nvs();
+}
+
+void current_sensor_get_calibration(float* calA, float* calB, float* calC,
+                                    float* offA, float* offB, float* offC) {
+    if (calA) *calA = s_calA;
+    if (calB) *calB = s_calB;
+    if (calC) *calC = s_calC;
+    if (offA) *offA = s_offA;
+    if (offB) *offB = s_offB;
+    if (offC) *offC = s_offC;
+}
+
+void current_sensor_set_enabled(bool enA, bool enB, bool enC) {
+    s_enA = enA;
+    s_enB = enB;
+    s_enC = enC;
+    save_calibration_nvs();
+}
+
+void current_sensor_get_enabled(bool* enA, bool* enB, bool* enC) {
+    if (enA) *enA = s_enA;
+    if (enB) *enB = s_enB;
+    if (enC) *enC = s_enC;
+}

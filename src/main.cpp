@@ -100,7 +100,7 @@ static void handleRescueFallbackIfNeeded() {
 // - web panel ve API: src/net/web_ui.cpp
 
 // CP yorumlama ayarlari. Web panelinden de guncellenebilir.
-float CP_DIVIDER_RATIO = 4.62f;
+float CP_DIVIDER_RATIO = 4.41f;
 float TH_A_MIN = 11.0f;
 float TH_B_MIN = 9.6f;
 float TH_C_MIN = 7.8f;
