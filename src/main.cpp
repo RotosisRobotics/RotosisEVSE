@@ -158,7 +158,7 @@ void setup()
 
   // Web + OTA
   web_init();
-  OTA_Manager::begin(kOtaManifestUrl, 60UL * 60UL * 1000UL, kGitHubFingerprint);
+  OTA_Manager::begin(kOtaManifestUrl, 60UL * 1000UL, kGitHubFingerprint);
 
   // OLED
   oled_init();
