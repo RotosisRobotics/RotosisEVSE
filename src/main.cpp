@@ -1,5 +1,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Preferences.h>
+#include <esp_ota_ops.h>
+#include <esp_system.h>
 
 #include "app_config.h"
 #include "app_pins.h"
@@ -14,6 +17,38 @@
 static constexpr char kOtaManifestUrl[] = "https://raw.githubusercontent.com/turgaycam/evseyedek/main/version.json";
 // Sertifika sabitlemek istersen SHA1 fingerprint'i buraya yaz.
 static constexpr char kGitHubFingerprint[] = "";
+static constexpr uint8_t kMaxConsecutiveWdtResets = 3;
+
+static bool isWdtResetReason(esp_reset_reason_t r) {
+  return r == ESP_RST_TASK_WDT || r == ESP_RST_INT_WDT || r == ESP_RST_WDT;
+}
+
+static void handleRescueFallbackIfNeeded() {
+  Preferences prefs;
+  if (!prefs.begin("bootctl", false)) return;
+
+  esp_reset_reason_t rr = esp_reset_reason();
+  uint8_t failCount = prefs.getUChar("wdt_cnt", 0);
+  if (isWdtResetReason(rr)) {
+    failCount++;
+  } else {
+    failCount = 0;
+  }
+  prefs.putUChar("wdt_cnt", failCount);
+
+  if (failCount >= kMaxConsecutiveWdtResets) {
+    const esp_partition_t* factory = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, nullptr);
+    if (factory != nullptr && esp_ota_set_boot_partition(factory) == ESP_OK) {
+      prefs.putUChar("wdt_cnt", 0);
+      prefs.end();
+      Serial.println("[BOOTCTL] 3x WDT reset algilandi, factory partition secildi.");
+      delay(50);
+      esp_restart();
+    }
+  }
+
+  prefs.end();
+}
 
 // Bu dosya projenin merkez akisidir.
 // Neyi nereden degistirecegini hizli bulmak icin:
@@ -147,6 +182,7 @@ void setup()
   Serial.begin(115200);
   delay(200);
   Serial.println("BOOT OK");
+  handleRescueFallbackIfNeeded();
 
   pinMode(STATE_LED_PIN, OUTPUT);
   pinMode(WIFI_LED_PIN, OUTPUT);

@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <esp_ota_ops.h>
+#include <mbedtls/sha256.h>
 
 #include "net/web_ui.h"
 
@@ -24,6 +25,8 @@ struct OtaContext {
   bool pendingVerify = false;
   bool markedValid = false;
   uint32_t bootMs = 0;
+  String verifyHeartbeatUrl;
+  bool verifyHeartbeatResolved = false;
 } ctx;
 
 HTTPUpdate httpUpdate;
@@ -34,6 +37,9 @@ constexpr uint32_t kVerifyTimeoutMs = 30 * 1000; // 30 sn icinde mark valid olma
 struct Manifest {
   String version;
   String url;
+  String healthUrl;
+  String sha256;
+  uint32_t size = 0;
 };
 
 static bool wifiReady() {
@@ -99,6 +105,9 @@ static bool parseManifest(const String& payload, Manifest& out) {
   }
   out.version = doc["version"].as<String>();
   out.url = doc["url"].as<String>();
+  if (doc.containsKey("health_url")) out.healthUrl = doc["health_url"].as<String>();
+  if (doc.containsKey("sha256")) out.sha256 = doc["sha256"].as<String>();
+  if (doc.containsKey("size")) out.size = doc["size"].as<uint32_t>();
   return out.version.length() > 0 && out.url.length() > 0;
 }
 
@@ -177,6 +186,119 @@ static bool performUpdate(const String& url) {
   return false;
 }
 
+static String toLowerHex(const uint8_t* buf, size_t len) {
+  static const char* kHex = "0123456789abcdef";
+  String out;
+  out.reserve(len * 2);
+  for (size_t i = 0; i < len; ++i) {
+    out += kHex[(buf[i] >> 4) & 0x0F];
+    out += kHex[buf[i] & 0x0F];
+  }
+  return out;
+}
+
+static bool precheckFirmware(const Manifest& m) {
+  if (m.size == 0 && m.sha256.length() == 0) {
+    ctx.lastStatus = "precheck_skipped";
+    return true;
+  }
+
+  WiFiClientSecure client;
+  configureClient(client);
+
+  HTTPClient http;
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setTimeout(5000);
+  if (!http.begin(client, m.url)) {
+    ctx.lastStatus = "precheck_begin_failed";
+    ctx.lastError = "OTA precheck HTTP baslatilamadi";
+    return false;
+  }
+
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    ctx.lastStatus = "precheck_http_error";
+    ctx.lastError = String("OTA precheck HTTP ") + code;
+    http.end();
+    return false;
+  }
+
+  WiFiClient* stream = http.getStreamPtr();
+  mbedtls_sha256_context shaCtx;
+  mbedtls_sha256_init(&shaCtx);
+  mbedtls_sha256_starts_ret(&shaCtx, 0);
+
+  uint8_t buf[1024];
+  uint32_t total = 0;
+  uint32_t lastDataMs = millis();
+  while (http.connected()) {
+    size_t avail = stream->available();
+    if (avail == 0) {
+      if (millis() - lastDataMs > 8000) break;
+      delay(1);
+      continue;
+    }
+    if (avail > sizeof(buf)) avail = sizeof(buf);
+    int r = stream->readBytes(reinterpret_cast<char*>(buf), avail);
+    if (r <= 0) continue;
+    total += static_cast<uint32_t>(r);
+    mbedtls_sha256_update_ret(&shaCtx, buf, static_cast<size_t>(r));
+    lastDataMs = millis();
+  }
+
+  uint8_t digest[32];
+  mbedtls_sha256_finish_ret(&shaCtx, digest);
+  mbedtls_sha256_free(&shaCtx);
+  http.end();
+
+  if (m.size != 0 && total != m.size) {
+    ctx.lastStatus = "precheck_size_mismatch";
+    ctx.lastError = String("OTA size mismatch exp=") + m.size + " got=" + total;
+    return false;
+  }
+
+  if (m.sha256.length() > 0) {
+    String expected = m.sha256;
+    expected.toLowerCase();
+    String actual = toLowerHex(digest, sizeof(digest));
+    if (actual != expected) {
+      ctx.lastStatus = "precheck_hash_mismatch";
+      ctx.lastError = "OTA SHA256 mismatch";
+      return false;
+    }
+  }
+
+  ctx.lastStatus = "precheck_ok";
+  ctx.lastError = "";
+  return true;
+}
+
+static bool sendHeartbeat(const String& url) {
+  if (url.length() == 0) return false;
+  WiFiClientSecure client;
+  configureClient(client);
+
+  HTTPClient http;
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setTimeout(2500);
+  if (!http.begin(client, url)) return false;
+  int code = http.GET();
+  http.end();
+  return code >= 200 && code < 300;
+}
+
+static bool markRunningAppValid() {
+  esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
+  if (err == ESP_OK) {
+    ctx.markedValid = true;
+    ctx.pendingVerify = false;
+    Serial.println("[OTA] Yeni firmware stabil olarak isaretlendi; rollback iptal");
+    return true;
+  }
+  Serial.printf("[OTA] Rollback iptal basarisiz: %s\n", esp_err_to_name(err));
+  return false;
+}
+
 static void handleUpdateCheck() {
   if (!ctx.checkRequested && ctx.checkIntervalMs > 0 && (millis() - ctx.lastCheckMs) < ctx.checkIntervalMs) {
     return;
@@ -199,6 +321,10 @@ static void handleUpdateCheck() {
   if (cmp > 0) {
     ctx.lastStatus = "update_available";
     Serial.printf("[OTA] Yeni surum bulunuyor -> %s\n", m.url.c_str());
+    if (!precheckFirmware(m)) {
+      ctx.lastUpdateOk = false;
+      return;
+    }
     ctx.lastUpdateOk = performUpdate(m.url);
   } else {
     ctx.lastStatus = "up_to_date";
@@ -212,23 +338,27 @@ static void handleRollbackGuard() {
   uint32_t now = millis();
   if (now - ctx.bootMs < kVerifyDelayMs) return; // biraz bekle
 
-  if (!wifiReady() || !web_ready_for_ota_validation()) {
-    if ((now - ctx.bootMs) > kVerifyTimeoutMs) {
-      ctx.lastStatus = "healthcheck_timeout";
-      ctx.lastError = "Wi-Fi/web health-check gecemedi; rollback icin restart";
-      Serial.println("[OTA] Health-check gecemedi; rollback icin restart");
-      ESP.restart();
-    }
+  if (!ctx.verifyHeartbeatResolved) {
+    Manifest m;
+    bool manifestOk = fetchManifest(m);
+    ctx.verifyHeartbeatUrl = (manifestOk && m.healthUrl.length()) ? m.healthUrl : ctx.manifestUrl;
+    ctx.verifyHeartbeatResolved = true;
+  }
+
+  if (wifiReady() && web_ready_for_ota_validation() && sendHeartbeat(ctx.verifyHeartbeatUrl)) {
+    markRunningAppValid();
     return;
   }
 
-  esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
-  if (err == ESP_OK) {
-    ctx.markedValid = true;
-    ctx.pendingVerify = false;
-    Serial.println("[OTA] Yeni firmware stabil olarak isaretlendi; rollback iptal");
-  } else {
-    Serial.printf("[OTA] Rollback iptal basarisiz: %s\n", esp_err_to_name(err));
+  if ((now - ctx.bootMs) > kVerifyTimeoutMs) {
+    ctx.lastStatus = "healthcheck_timeout_rollback";
+    ctx.lastError = "Wi-Fi/web/heartbeat dogrulanamadi, rollback";
+    Serial.println("[OTA] 30 sn icinde heartbeat yok; rollback tetikleniyor");
+    esp_err_t err = esp_ota_mark_app_invalid_rollback_and_reboot();
+    if (err != ESP_OK) {
+      Serial.printf("[OTA] rollback_and_reboot basarisiz: %s\n", esp_err_to_name(err));
+      ESP.restart();
+    }
   }
 
   if (!ctx.markedValid && (now - ctx.bootMs) > kVerifyTimeoutMs) {
@@ -248,6 +378,8 @@ void begin(const char* manifestUrl, uint32_t checkIntervalMs, const char* sha1Fi
   ctx.bootMs = millis();
   ctx.lastUpdateOk = false;
   ctx.markedValid = false;
+  ctx.verifyHeartbeatResolved = false;
+  ctx.verifyHeartbeatUrl = "";
   ctx.lastRemoteVersion = "-";
   ctx.lastStatus = "boot";
   ctx.lastError = "";
