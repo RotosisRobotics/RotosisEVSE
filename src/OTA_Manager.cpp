@@ -7,6 +7,8 @@
 #include <WiFiClientSecure.h>
 #include <esp_ota_ops.h>
 
+#include "net/web_ui.h"
+
 namespace {
 struct OtaContext {
   String manifestUrl;
@@ -209,6 +211,16 @@ static void handleRollbackGuard() {
   if (!ctx.pendingVerify || ctx.markedValid) return;
   uint32_t now = millis();
   if (now - ctx.bootMs < kVerifyDelayMs) return; // biraz bekle
+
+  if (!wifiReady() || !web_ready_for_ota_validation()) {
+    if ((now - ctx.bootMs) > kVerifyTimeoutMs) {
+      ctx.lastStatus = "healthcheck_timeout";
+      ctx.lastError = "Wi-Fi/web health-check gecemedi; rollback icin restart";
+      Serial.println("[OTA] Health-check gecemedi; rollback icin restart");
+      ESP.restart();
+    }
+    return;
+  }
 
   esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
   if (err == ESP_OK) {

@@ -166,6 +166,8 @@ static const KnownWifi kKnownWifis[] = {
 WiFiMulti wifiMulti;
 static WebServer server(80);
 static bool wifiEventsReady = false;
+static uint32_t s_lastHttpRequestMs = 0;
+static uint32_t s_successfulHttpResponses = 0;
 static uint32_t s_resetTotalCount = 0;
 static uint32_t s_resetNowCount = 0;
 static uint32_t s_resetHistoryCount = 0;
@@ -276,7 +278,12 @@ static bool requireAdminAuth() {
 
 static void noteWebActivity() {
   // Kullanici aktifken periyodik OTA kontrolu web sunucusunu bloklamasin.
+  s_lastHttpRequestMs = millis();
   OTA_Manager::deferPeriodicChecks(15000);
+}
+
+static void noteHttpResponseSent() {
+  s_successfulHttpResponses++;
 }
 
 static const char* chargeModeLabel(int mode) {
@@ -1664,19 +1671,23 @@ static void setupWiFi() {
 // Her endpoint kendi verisini veya komutunu burada uretir.
 static void handleRoot() {
   noteWebActivity();
+  noteHttpResponseSent();
   server.send_P(200, "text/html", USER_HTML);
 }
 static void handleAdmin() {
   noteWebActivity();
   if (!requireAdminAuth()) return;
+  noteHttpResponseSent();
   server.send_P(200, "text/html", MAIN_HTML);
 }
-static void handlePing() { server.send(200, "text/plain", "OK"); }
-static void handleManifest() { server.send_P(200, "application/manifest+json", MANIFEST_JSON); }
-static void handleServiceWorker() { server.send_P(200, "application/javascript", SERVICE_WORKER_JS); }
-static void handleAppIcon() { server.send_P(200, "image/svg+xml", APP_ICON_SVG); }
+static void handlePing() { noteWebActivity(); noteHttpResponseSent(); server.send(200, "text/plain", "OK"); }
+static void handleManifest() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "application/manifest+json", MANIFEST_JSON); }
+static void handleServiceWorker() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "application/javascript", SERVICE_WORKER_JS); }
+static void handleAppIcon() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "image/svg+xml", APP_ICON_SVG); }
 static void handleOtaCheck() {
+  noteWebActivity();
   OTA_Manager::triggerCheckNow();
+  noteHttpResponseSent();
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
@@ -1796,6 +1807,7 @@ static void handleStatus() {
   );
 
   server.send(200, "application/json", json);
+  noteHttpResponseSent();
 }
 
 // Gecmis seanslar icin ayri JSON endpoint.
@@ -1829,6 +1841,7 @@ static void handleHistory() {
   }
   snprintf(json + n, sizeof(json) - n, "]}");
   server.send(200, "application/json", json);
+  noteHttpResponseSent();
 }
 
 // Kullanici panelindeki AUTO / START / STOP komutu burada islenir.
@@ -1855,6 +1868,7 @@ static void handleChargeCmd() {
   }
 
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 // Enerji ve gecmis sifirlama endpoint'i.
@@ -1882,6 +1896,7 @@ static void handleDataReset() {
     clearHistory ? 1 : 0
   );
   server.send(200, "application/json", json);
+  noteHttpResponseSent();
 }
 
 // Web admin panelinden gelen CP / relay / timing ayarlari burada uygulanir.
@@ -1915,28 +1930,33 @@ static void handleCalibApply() {
     TH_E_MIN = clampFloatArg(server.arg("the"), 0.0f, 15.0f, TH_E_MIN);
   }
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 static void handleRelay() {
   if (server.hasArg("on")) relay_set(server.arg("on") == "1");
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 static void handleRelayAuto() {
   if (server.hasArg("en")) relay_set_auto_enabled(server.arg("en") == "1");
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 static void handlePulseReset() {
   if (!requireAdminAuth()) return;
   pulseGpio(MOSFET_RESET_PIN);
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 static void handlePulseSet() {
   if (!requireAdminAuth()) return;
   pulseGpio(MOSFET_SET_PIN);
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 
@@ -2020,5 +2040,12 @@ void web_loop() {
   }
 
   refreshMdns();
+}
+
+bool web_ready_for_ota_validation() {
+  bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
+  if (!staOk) return false;
+  if (s_successfulHttpResponses == 0) return false;
+  return s_lastHttpRequestMs != 0;
 }
 
