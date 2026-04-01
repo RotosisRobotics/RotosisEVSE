@@ -249,6 +249,40 @@ static float safeFinite(float v) {
   return v;
 }
 
+static void appendJsonEscaped(String& out, const char* value) {
+  const char* src = value ? value : "";
+  while (*src) {
+    const char c = *src++;
+    switch (c) {
+      case '\"': out += F("\\\""); break;
+      case '\\': out += F("\\\\"); break;
+      case '\b': out += F("\\b"); break;
+      case '\f': out += F("\\f"); break;
+      case '\n': out += F("\\n"); break;
+      case '\r': out += F("\\r"); break;
+      case '\t': out += F("\\t"); break;
+      default:
+        if ((unsigned char)c < 0x20) {
+          char buf[7];
+          snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)c);
+          out += buf;
+        } else {
+          out += c;
+        }
+        break;
+    }
+  }
+}
+
+static void appendJsonStringField(String& out, const char* key, const char* value, bool withComma = true) {
+  out += '\"';
+  out += key;
+  out += F("\":\"");
+  appendJsonEscaped(out, value);
+  out += '\"';
+  if (withComma) out += ',';
+}
+
 struct DisplayCurrentState {
   bool primed = false;
   float ia = 0.0f;
@@ -1541,65 +1575,75 @@ static void handleStatus() {
     alarmTxt = "Wi-Fi baglantisi yok";
   }
 
-  char json[4096];
-  snprintf(
-    json, sizeof(json),
-    "{\"lInt\":%d,\"onD\":%lu,\"offD\":%lu,\"stable\":%d,"
-    "\"cpHigh\":%.2f,\"cpLow\":%.2f,\"adcHigh\":%.3f,\"adcLow\":%.3f,"
-    "\"stateRaw\":\"%s\",\"ia\":%.2f,\"ib\":%.2f,\"ic\":%.2f,\"iAvg\":%.2f,"
-    "\"pW\":%.1f,\"eKWh\":%.3f,\"tSec\":%lu,\"phase\":%d,\"rLbl\":\"%s\","
-    "\"wifiSsid\":\"%s\",\"wifiLoc\":\"%s\",\"ip\":\"%s\",\"host\":\"%s\","
-    "\"state\":\"%s\",\"div\":%.3f,\"thb\":%.2f,\"thc\":%.2f,\"thd\":%.2f,\"the\":%.2f,"
-    "\"icalA\":%.2f,\"icalB\":%.2f,\"icalC\":%.2f,\"ioffA\":%.2f,\"ioffB\":%.2f,\"ioffC\":%.2f,"
-    "\"rngLowMax\":%.2f,\"rngMidMax\":%.2f,\"rngLowOff\":%.2f,\"rngMidOff\":%.2f,"
-    "\"modeId\":%d,\"mode\":\"%s\",\"limitA\":%.1f,\"staOk\":%d,"
-    "\"otaCur\":\"%s\",\"otaRemote\":\"%s\",\"otaPart\":\"%s\",\"otaImgState\":\"%s\",\"otaStatus\":\"%s\",\"otaErr\":\"%s\",\"otaAgeMs\":%lu,"
-    "\"alarmLv\":%d,\"alarmTxt\":\"%s\","
-    "\"sLive\":%d,\"sLiveStart\":%lu,\"sLiveSec\":%lu,\"sLiveKWh\":%.3f,"
-    "\"rstTotal\":%lu,\"rstNow\":%lu,\"rstHist\":%lu,\"rstLastSec\":%lu,\"rstLastMode\":\"%s\"}",
-    loopIntervalMs,
-    (unsigned long)relayOnDelayMs,
-    (unsigned long)relayOffDelayMs,
-    stableCount,
-    cpHigh, cpLow, adcHigh, adcLow,
-    m.stateRaw.c_str(),
-    ia, ib, ic, iAvg,
-    pW, eKWh,
-    (unsigned long)g_chargeSeconds,
-    g_phaseCount,
-    relayLabel,
-    wifiSsid.c_str(),
-    wifiLoc.c_str(),
-    ipStr.c_str(),
-    hostStr.c_str(),
-    m.stateStable.c_str(),
-    CP_DIVIDER_RATIO,
-    TH_B_MIN, TH_C_MIN, TH_D_MIN, TH_E_MIN,
-    calA, calB, calC, offA, offB, offC,
-    rngLowMax, rngMidMax, rngLowOff, rngMidOff,
-    g_chargeMode,
-    chargeModeLabel(g_chargeMode),
-    safeFinite(g_currentLimitA),
-    staOk ? 1 : 0,
-    otaCurrent,
-    otaRemote,
-    otaPart,
-    otaImgState,
-    otaStatus,
-    otaError,
-    (unsigned long)otaAgeMs,
-    alarmLv,
-    alarmTxt,
-    g_sessionLive ? 1 : 0,
-    (unsigned long)g_sessionLiveStartSec,
-    (unsigned long)g_sessionLiveSeconds,
-    safeFinite(g_sessionLiveEnergyKWh),
-    (unsigned long)s_resetTotalCount,
-    (unsigned long)s_resetNowCount,
-    (unsigned long)s_resetHistoryCount,
-    (unsigned long)s_resetLastSec,
-    resetModeLabel(s_resetLastModeId)
-  );
+  String json;
+  json.reserve(2300);
+  json += '{';
+  json += "\"lInt\":" + String(loopIntervalMs);
+  json += ",\"onD\":" + String((unsigned long)relayOnDelayMs);
+  json += ",\"offD\":" + String((unsigned long)relayOffDelayMs);
+  json += ",\"stable\":" + String(stableCount);
+  json += ",\"cpHigh\":" + String(cpHigh, 2);
+  json += ",\"cpLow\":" + String(cpLow, 2);
+  json += ",\"adcHigh\":" + String(adcHigh, 3);
+  json += ",\"adcLow\":" + String(adcLow, 3);
+  appendJsonStringField(json, "stateRaw", m.stateRaw.c_str());
+  json += "\"ia\":" + String(ia, 2);
+  json += ",\"ib\":" + String(ib, 2);
+  json += ",\"ic\":" + String(ic, 2);
+  json += ",\"iAvg\":" + String(iAvg, 2);
+  json += ",\"pW\":" + String(pW, 1);
+  json += ",\"eKWh\":" + String(eKWh, 3);
+  json += ",\"tSec\":" + String((unsigned long)g_chargeSeconds);
+  json += ",\"phase\":" + String(g_phaseCount);
+  json += ',';
+  appendJsonStringField(json, "rLbl", relayLabel);
+  appendJsonStringField(json, "wifiSsid", wifiSsid.c_str());
+  appendJsonStringField(json, "wifiLoc", wifiLoc.c_str());
+  appendJsonStringField(json, "ip", ipStr.c_str());
+  appendJsonStringField(json, "host", hostStr.c_str());
+  appendJsonStringField(json, "state", m.stateStable.c_str());
+  json += "\"div\":" + String(CP_DIVIDER_RATIO, 3);
+  json += ",\"thb\":" + String(TH_B_MIN, 2);
+  json += ",\"thc\":" + String(TH_C_MIN, 2);
+  json += ",\"thd\":" + String(TH_D_MIN, 2);
+  json += ",\"the\":" + String(TH_E_MIN, 2);
+  json += ",\"icalA\":" + String(calA, 2);
+  json += ",\"icalB\":" + String(calB, 2);
+  json += ",\"icalC\":" + String(calC, 2);
+  json += ",\"ioffA\":" + String(offA, 2);
+  json += ",\"ioffB\":" + String(offB, 2);
+  json += ",\"ioffC\":" + String(offC, 2);
+  json += ",\"rngLowMax\":" + String(rngLowMax, 2);
+  json += ",\"rngMidMax\":" + String(rngMidMax, 2);
+  json += ",\"rngLowOff\":" + String(rngLowOff, 2);
+  json += ",\"rngMidOff\":" + String(rngMidOff, 2);
+  json += ",\"modeId\":" + String(g_chargeMode);
+  json += ',';
+  appendJsonStringField(json, "mode", chargeModeLabel(g_chargeMode));
+  json += "\"limitA\":" + String(safeFinite(g_currentLimitA), 1);
+  json += ",\"staOk\":" + String(staOk ? 1 : 0);
+  json += ',';
+  appendJsonStringField(json, "otaCur", otaCurrent);
+  appendJsonStringField(json, "otaRemote", otaRemote);
+  appendJsonStringField(json, "otaPart", otaPart);
+  appendJsonStringField(json, "otaImgState", otaImgState);
+  appendJsonStringField(json, "otaStatus", otaStatus);
+  appendJsonStringField(json, "otaErr", otaError);
+  json += "\"otaAgeMs\":" + String((unsigned long)otaAgeMs);
+  json += ",\"alarmLv\":" + String(alarmLv);
+  json += ',';
+  appendJsonStringField(json, "alarmTxt", alarmTxt);
+  json += "\"sLive\":" + String(g_sessionLive ? 1 : 0);
+  json += ",\"sLiveStart\":" + String((unsigned long)g_sessionLiveStartSec);
+  json += ",\"sLiveSec\":" + String((unsigned long)g_sessionLiveSeconds);
+  json += ",\"sLiveKWh\":" + String(safeFinite(g_sessionLiveEnergyKWh), 3);
+  json += ",\"rstTotal\":" + String((unsigned long)s_resetTotalCount);
+  json += ",\"rstNow\":" + String((unsigned long)s_resetNowCount);
+  json += ",\"rstHist\":" + String((unsigned long)s_resetHistoryCount);
+  json += ",\"rstLastSec\":" + String((unsigned long)s_resetLastSec);
+  json += ',';
+  appendJsonStringField(json, "rstLastMode", resetModeLabel(s_resetLastModeId), false);
+  json += '}';
 
   server.send(200, "application/json", json);
   noteHttpResponseSent();
@@ -1608,33 +1652,37 @@ static void handleStatus() {
 // Gecmis seanslar icin ayri JSON endpoint.
 static void handleHistory() {
   noteWebActivity();
-  char json[4096];
-  int n = 0;
-  n += snprintf(
-    json + n, sizeof(json) - n,
-    "{\"count\":%d,\"active\":{\"on\":%d,\"start\":%lu,\"sec\":%lu,\"kWh\":%.3f},\"items\":[",
-    g_histCount,
-    g_sessionLive ? 1 : 0,
-    (unsigned long)g_sessionLiveStartSec,
-    (unsigned long)g_sessionLiveSeconds,
-    safeFinite(g_sessionLiveEnergyKWh)
-  );
+  String json;
+  json.reserve(1200);
+  json += F("{\"count\":");
+  json += String(g_histCount);
+  json += F(",\"active\":{\"on\":");
+  json += String(g_sessionLive ? 1 : 0);
+  json += F(",\"start\":");
+  json += String((unsigned long)g_sessionLiveStartSec);
+  json += F(",\"sec\":");
+  json += String((unsigned long)g_sessionLiveSeconds);
+  json += F(",\"kWh\":");
+  json += String(safeFinite(g_sessionLiveEnergyKWh), 3);
+  json += F("},\"items\":[");
 
   int start = (g_histCount < 20) ? 0 : g_histHead;
-  for (int i = 0; i < g_histCount && n < (int)sizeof(json) - 2; i++) {
+  for (int i = 0; i < g_histCount; i++) {
     int idx = (start + i) % 20;
-    n += snprintf(
-      json + n, sizeof(json) - n,
-      "%s{\"s\":%lu,\"d\":%lu,\"e\":%.3f,\"p\":%.1f,\"ph\":%u}",
-      (i == 0) ? "" : ",",
-      (unsigned long)g_histStartSec[idx],
-      (unsigned long)g_histDurationSec[idx],
-      safeFinite(g_histEnergyKWh[idx]),
-      safeFinite(g_histAvgPowerW[idx]),
-      (unsigned)g_histPhaseCount[idx]
-    );
+    if (i > 0) json += ',';
+    json += F("{\"s\":");
+    json += String((unsigned long)g_histStartSec[idx]);
+    json += F(",\"d\":");
+    json += String((unsigned long)g_histDurationSec[idx]);
+    json += F(",\"e\":");
+    json += String(safeFinite(g_histEnergyKWh[idx]), 3);
+    json += F(",\"p\":");
+    json += String(safeFinite(g_histAvgPowerW[idx]), 1);
+    json += F(",\"ph\":");
+    json += String((unsigned)g_histPhaseCount[idx]);
+    json += '}';
   }
-  snprintf(json + n, sizeof(json) - n, "]}");
+  json += F("]}");
   server.send(200, "application/json", json);
   noteHttpResponseSent();
 }
