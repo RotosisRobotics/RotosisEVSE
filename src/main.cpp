@@ -18,16 +18,27 @@ static constexpr char kOtaManifestUrl[] =
 static constexpr char kGitHubFingerprint[] = "";
 static constexpr uint32_t kOtaAutoCheckIntervalMs = 60UL * 60UL * 1000UL;
 static constexpr uint8_t kMaxConsecutiveWdtResets = 3;
+static constexpr uint8_t kQuickResetFactoryThreshold = 5;
+static constexpr uint32_t kQuickResetClearAfterMs = 30000;
 static constexpr int kForceFactoryPin = 0;             // BOOT butonu (GPIO0)
 static constexpr uint32_t kForceFactoryHoldMs = 10000; // 10 saniye
 static bool sFactoryRestartPending = false;
 static bool sFactoryButtonPressActive = false;
 static bool sFactoryButtonHoldHandled = false;
 static uint32_t sFactoryButtonPressStartMs = 0;
+static uint8_t sQuickResetBootStreak = 0;
+static bool sQuickResetClearArmed = false;
+static uint32_t sQuickResetClearStartMs = 0;
+static esp_reset_reason_t sLastResetReason = ESP_RST_UNKNOWN;
 
 static bool isWdtResetReason(esp_reset_reason_t reason)
 {
   return reason == ESP_RST_TASK_WDT || reason == ESP_RST_INT_WDT || reason == ESP_RST_WDT;
+}
+
+static bool isQuickResetReason(esp_reset_reason_t reason)
+{
+  return reason == ESP_RST_POWERON || reason == ESP_RST_EXT || reason == ESP_RST_BROWNOUT;
 }
 
 static bool switchBootToFactory()
@@ -147,6 +158,29 @@ bool factoryButtonRestartPending()
   return sFactoryRestartPending;
 }
 
+uint8_t factoryQuickResetStreak()
+{
+  return sQuickResetBootStreak;
+}
+
+bool factoryQuickResetClearArmed()
+{
+  return sQuickResetClearArmed;
+}
+
+uint32_t factoryQuickResetClearRemainingMs()
+{
+  if (!sQuickResetClearArmed) return 0;
+  uint32_t elapsed = millis() - sQuickResetClearStartMs;
+  if (elapsed >= kQuickResetClearAfterMs) return 0;
+  return kQuickResetClearAfterMs - elapsed;
+}
+
+int factoryLastResetReason()
+{
+  return (int)sLastResetReason;
+}
+
 static void serviceFactoryButton()
 {
   ensureForceFactoryPinMode();
@@ -169,10 +203,24 @@ static void handleRescueFallbackIfNeeded()
   Preferences prefs;
   if (!prefs.begin("bootctl", false)) return;
 
-  esp_reset_reason_t resetReason = esp_reset_reason();
+  sLastResetReason = esp_reset_reason();
   uint8_t failCount = prefs.getUChar("wdt_cnt", 0);
-  failCount = isWdtResetReason(resetReason) ? (uint8_t)(failCount + 1) : 0;
+  failCount = isWdtResetReason(sLastResetReason) ? (uint8_t)(failCount + 1) : 0;
   prefs.putUChar("wdt_cnt", failCount);
+
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  bool runningFactory =
+    (running != nullptr && running->subtype == ESP_PARTITION_SUBTYPE_APP_FACTORY);
+  uint8_t quickResetStreak = prefs.getUChar("rst_streak", 0);
+  if (runningFactory) {
+    quickResetStreak = 0;
+  } else if (isQuickResetReason(sLastResetReason) && quickResetStreak < 255) {
+    quickResetStreak++;
+  }
+  prefs.putUChar("rst_streak", quickResetStreak);
+  sQuickResetBootStreak = quickResetStreak;
+  sQuickResetClearArmed = (!runningFactory && quickResetStreak > 0);
+  sQuickResetClearStartMs = millis();
 
   if (failCount >= kMaxConsecutiveWdtResets && switchBootToFactory()) {
     prefs.putUChar("wdt_cnt", 0);
@@ -182,7 +230,35 @@ static void handleRescueFallbackIfNeeded()
     esp_restart();
   }
 
+  if (!runningFactory &&
+      quickResetStreak >= kQuickResetFactoryThreshold &&
+      switchBootToFactory()) {
+    prefs.putUChar("rst_streak", 0);
+    prefs.end();
+    sQuickResetBootStreak = 0;
+    sQuickResetClearArmed = false;
+    Serial.printf("[BOOTCTL] %u hizli reset algilandi, factory secildi\n", quickResetStreak);
+    delay(50);
+    esp_restart();
+  }
+
   prefs.end();
+}
+
+static void clearQuickResetStreakIfStable()
+{
+  if (!sQuickResetClearArmed) return;
+  if ((millis() - sQuickResetClearStartMs) < kQuickResetClearAfterMs) return;
+
+  Preferences prefs;
+  if (!prefs.begin("bootctl", false)) return;
+  prefs.putUChar("rst_streak", 0);
+  prefs.end();
+
+  sQuickResetBootStreak = 0;
+  sQuickResetClearArmed = false;
+  sQuickResetClearStartMs = 0;
+  Serial.println("[BOOTCTL] Hizli reset sayaci temizlendi");
 }
 
 // Bu dosya projenin merkez akisidir.
@@ -364,6 +440,7 @@ void loop()
   // 5) PWM ve role kararinin uygulanmasi
 
   serviceFactoryButton();
+  clearQuickResetStreakIfStable();
 
   // Web sunucu dongusu
   web_loop();

@@ -62,6 +62,10 @@ extern int factoryButtonPin();
 extern bool factoryButtonIsPressed();
 extern uint32_t factoryButtonHoldMs();
 extern bool factoryButtonRestartPending();
+extern uint8_t factoryQuickResetStreak();
+extern bool factoryQuickResetClearArmed();
+extern uint32_t factoryQuickResetClearRemainingMs();
+extern int factoryLastResetReason();
 
 static void pulseGpio(uint8_t pin) {
   digitalWrite(pin, HIGH);
@@ -1478,6 +1482,10 @@ static void handleStatus() {
   bool bootPressed = factoryButtonIsPressed();
   uint32_t bootHoldMs = factoryButtonHoldMs();
   bool bootPending = factoryButtonRestartPending();
+  uint8_t rescueStreak = factoryQuickResetStreak();
+  bool rescueArmed = factoryQuickResetClearArmed();
+  uint32_t rescueClrMs = factoryQuickResetClearRemainingMs();
+  int resetReason = factoryLastResetReason();
   if (staOk) {
     wifiSsid = WiFi.SSID();
     wifiLoc = wifiLocationForSsid(wifiSsid);
@@ -1516,7 +1524,8 @@ static void handleStatus() {
     "\"alarmLv\":%d,\"alarmTxt\":\"%s\","
     "\"sLive\":%d,\"sLiveStart\":%lu,\"sLiveSec\":%lu,\"sLiveKWh\":%.3f,"
     "\"rstTotal\":%lu,\"rstNow\":%lu,\"rstHist\":%lu,\"rstLastSec\":%lu,\"rstLastMode\":\"%s\","
-    "\"bootPin\":%d,\"bootPressed\":%d,\"bootHoldMs\":%lu,\"bootPending\":%d}",
+    "\"bootPin\":%d,\"bootPressed\":%d,\"bootHoldMs\":%lu,\"bootPending\":%d,"
+    "\"rescueStreak\":%u,\"rescueArmed\":%d,\"rescueClrMs\":%lu,\"resetReason\":%d}",
     loopIntervalMs,
     (unsigned long)relayOnDelayMs,
     (unsigned long)relayOffDelayMs,
@@ -1556,7 +1565,11 @@ static void handleStatus() {
     bootPin,
     bootPressed ? 1 : 0,
     (unsigned long)bootHoldMs,
-    bootPending ? 1 : 0
+    bootPending ? 1 : 0,
+    (unsigned)rescueStreak,
+    rescueArmed ? 1 : 0,
+    (unsigned long)rescueClrMs,
+    resetReason
   );
 
   server.send(200, "application/json", s_jsonBuf);
