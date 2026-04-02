@@ -2,10 +2,13 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
 #include <WebServer.h>
 #include <Update.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
+#include <WiFiClientSecure.h>
 #include <esp_ota_ops.h>
 #include <ctype.h>
 #include <math.h>
@@ -189,7 +192,7 @@ static const KnownWifi kKnownWifis[] = {
 WiFiMulti wifiMulti;
 static WebServer server(80);
 static bool wifiEventsReady = false;
-static char s_jsonBuf[4096];
+static char s_jsonBuf[6144];
 static bool s_serverStarted = false;
 static uint32_t s_lastWebLoopMs = 0;
 static uint32_t s_resetTotalCount = 0;
@@ -199,6 +202,27 @@ static uint32_t s_resetLastSec = 0;
 static uint8_t s_resetLastModeId = 0;
 static Preferences s_resetPrefs;
 static bool s_resetPrefsReady = false;
+static Preferences s_geoPrefs;
+static bool s_geoPrefsReady = false;
+static uint32_t s_geoNextRefreshMs = 0;
+
+struct GeoState {
+  String apiKey;
+  String address;
+  String source;
+  String status;
+  String error;
+  float lat = 0.0f;
+  float lng = 0.0f;
+  float accuracyM = 0.0f;
+  uint32_t updatedAtMs = 0;
+};
+
+static GeoState s_geo;
+
+constexpr uint32_t kGeoBootDelayMs = 15000UL;
+constexpr uint32_t kGeoRefreshMs = 6UL * 60UL * 60UL * 1000UL;
+constexpr uint32_t kGeoRetryMs = 10UL * 60UL * 1000UL;
 
 struct ManualOtaState {
   bool active = false;
@@ -391,6 +415,253 @@ static void noteResetEvent(bool clearNow, bool clearHistory) {
     s_resetLastModeId = 2;
   }
   saveResetStats();
+}
+
+static bool geoKeyConfigured() {
+  return s_geo.apiKey.length() >= 8;
+}
+
+static void scheduleGeoRefresh(uint32_t delayMs) {
+  s_geoNextRefreshMs = millis() + delayMs;
+}
+
+static String jsonEscape(const String& raw) {
+  String out;
+  out.reserve(raw.length() + 8);
+  for (size_t i = 0; i < raw.length(); ++i) {
+    char c = raw[i];
+    if (c == '\\' || c == '"') {
+      out += '\\';
+      out += c;
+    } else if (c == '\n' || c == '\r') {
+      out += ' ';
+    } else if ((uint8_t)c >= 0x20) {
+      out += c;
+    }
+  }
+  return out;
+}
+
+static String urlEncode(const String& raw) {
+  static const char kHex[] = "0123456789ABCDEF";
+  String out;
+  out.reserve(raw.length() * 3);
+  for (size_t i = 0; i < raw.length(); ++i) {
+    uint8_t c = static_cast<uint8_t>(raw[i]);
+    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      out += static_cast<char>(c);
+      continue;
+    }
+    out += '%';
+    out += kHex[(c >> 4) & 0x0F];
+    out += kHex[c & 0x0F];
+  }
+  return out;
+}
+
+static void appendPlacePart(String& out, const String& part) {
+  String clean = part;
+  clean.trim();
+  if (clean.length() == 0) return;
+  if (out.length()) out += ", ";
+  out += clean;
+}
+
+static void clearGeoState(bool keepKey) {
+  if (!keepKey) s_geo.apiKey = "";
+  s_geo.address = "";
+  s_geo.source = "";
+  s_geo.status = geoKeyConfigured() ? "bekleniyor" : "anahtar_yok";
+  s_geo.error = "";
+  s_geo.lat = 0.0f;
+  s_geo.lng = 0.0f;
+  s_geo.accuracyM = 0.0f;
+  s_geo.updatedAtMs = 0;
+}
+
+static void saveGeoState() {
+  if (!s_geoPrefsReady) return;
+  s_geoPrefs.putString("key", s_geo.apiKey);
+  s_geoPrefs.putString("addr", s_geo.address);
+  s_geoPrefs.putString("src", s_geo.source);
+  s_geoPrefs.putString("st", s_geo.status);
+  s_geoPrefs.putString("err", s_geo.error);
+  s_geoPrefs.putFloat("lat", s_geo.lat);
+  s_geoPrefs.putFloat("lng", s_geo.lng);
+  s_geoPrefs.putFloat("acc", s_geo.accuracyM);
+}
+
+static void loadGeoState() {
+  if (!s_geoPrefsReady) return;
+  s_geo.apiKey = s_geoPrefs.getString("key", "");
+  s_geo.address = s_geoPrefs.getString("addr", "");
+  s_geo.source = s_geoPrefs.getString("src", "");
+  s_geo.status = s_geoPrefs.getString("st", "");
+  s_geo.error = s_geoPrefs.getString("err", "");
+  s_geo.lat = s_geoPrefs.getFloat("lat", 0.0f);
+  s_geo.lng = s_geoPrefs.getFloat("lng", 0.0f);
+  s_geo.accuracyM = s_geoPrefs.getFloat("acc", 0.0f);
+  s_geo.updatedAtMs = s_geo.address.length() ? millis() : 0;
+  if (s_geo.status.length() == 0) {
+    s_geo.status = geoKeyConfigured() ? (s_geo.address.length() ? "hazir" : "bekleniyor") : "anahtar_yok";
+  }
+}
+
+static bool fetchIpLocation(float& lat, float& lng, String& approxLabel, String& error) {
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  http.setConnectTimeout(5000);
+  http.setTimeout(5000);
+  if (!http.begin(client, "https://ipapi.co/json/")) {
+    error = "IP konum servisi acilamadi";
+    return false;
+  }
+
+  int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK) {
+    error = "IP konum HTTP " + String(httpCode);
+    http.end();
+    return false;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  DynamicJsonDocument doc(2048);
+  DeserializationError jsonErr = deserializeJson(doc, payload);
+  if (jsonErr) {
+    error = "IP konum JSON hatasi";
+    return false;
+  }
+
+  lat = doc["latitude"] | 0.0f;
+  lng = doc["longitude"] | 0.0f;
+  if (fabsf(lat) < 0.001f && fabsf(lng) < 0.001f) {
+    error = "IP konum koordinati bulunamadi";
+    return false;
+  }
+
+  approxLabel = "";
+  appendPlacePart(approxLabel, String((const char*)(doc["city"] | "")));
+  appendPlacePart(approxLabel, String((const char*)(doc["region"] | "")));
+  appendPlacePart(approxLabel, String((const char*)(doc["country_name"] | "")));
+  if (approxLabel.length() == 0) approxLabel = "Yaklasik IP konumu";
+  return true;
+}
+
+static bool reverseGeocodeOpenCage(float lat, float lng, String& address, String& error) {
+  if (!geoKeyConfigured()) {
+    error = "OpenCage anahtari yok";
+    return false;
+  }
+
+  String query = String(lat, 6) + "," + String(lng, 6);
+  String url = "https://api.opencagedata.com/geocode/v1/json?q=" + urlEncode(query) +
+               "&key=" + urlEncode(s_geo.apiKey) +
+               "&language=tr&limit=1&no_annotations=1&address_only=1&abbrv=1&no_record=1";
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  http.setConnectTimeout(7000);
+  http.setTimeout(7000);
+  if (!http.begin(client, url)) {
+    error = "OpenCage baglantisi kurulamadi";
+    return false;
+  }
+
+  int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK) {
+    error = "OpenCage HTTP " + String(httpCode);
+    http.end();
+    return false;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  DynamicJsonDocument doc(4096);
+  DeserializationError jsonErr = deserializeJson(doc, payload);
+  if (jsonErr) {
+    error = "OpenCage JSON hatasi";
+    return false;
+  }
+
+  JsonArray results = doc["results"].as<JsonArray>();
+  if (results.isNull() || results.size() == 0) {
+    error = "OpenCage adres bulamadi";
+    return false;
+  }
+
+  address = String((const char*)(results[0]["formatted"] | ""));
+  address.trim();
+  if (address.length() == 0) {
+    error = "OpenCage bos adres dondu";
+    return false;
+  }
+  return true;
+}
+
+static bool refreshGeoFromIp(bool manual) {
+  bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
+  if (!geoKeyConfigured()) {
+    if (!manual) {
+      s_geo.status = "anahtar_yok";
+      s_geo.error = "";
+      saveGeoState();
+    }
+    scheduleGeoRefresh(kGeoRetryMs);
+    return false;
+  }
+
+  if (!staOk) {
+    if (s_geo.address.length() == 0) s_geo.status = "wifi_yok";
+    s_geo.error = "Wi-Fi bagli degil";
+    saveGeoState();
+    scheduleGeoRefresh(kGeoRetryMs);
+    return false;
+  }
+
+  float lat = 0.0f;
+  float lng = 0.0f;
+  String approxLabel;
+  String ipError;
+  if (!fetchIpLocation(lat, lng, approxLabel, ipError)) {
+    if (s_geo.address.length() == 0) s_geo.status = "ip_hatasi";
+    s_geo.error = ipError;
+    saveGeoState();
+    scheduleGeoRefresh(kGeoRetryMs);
+    return false;
+  }
+
+  s_geo.lat = lat;
+  s_geo.lng = lng;
+  s_geo.accuracyM = 0.0f;
+
+  String resolvedAddress;
+  String geocodeError;
+  if (reverseGeocodeOpenCage(lat, lng, resolvedAddress, geocodeError)) {
+    s_geo.address = resolvedAddress;
+    s_geo.source = "Yaklasik IP + OpenCage";
+    s_geo.status = "hazir";
+    s_geo.error = "";
+    s_geo.updatedAtMs = millis();
+    saveGeoState();
+    scheduleGeoRefresh(kGeoRefreshMs);
+    return true;
+  }
+
+  if (approxLabel.length()) s_geo.address = approxLabel;
+  s_geo.source = "Yaklasik IP";
+  s_geo.status = s_geo.address.length() ? "yaklasik" : "geocode_hata";
+  s_geo.error = geocodeError;
+  s_geo.updatedAtMs = millis();
+  saveGeoState();
+  scheduleGeoRefresh(s_geo.address.length() ? kGeoRefreshMs : kGeoRetryMs);
+  return s_geo.address.length() > 0;
 }
 
 // 2) Sayfaya gomulu on yuz kaynaklari burada baslar.
@@ -724,9 +995,11 @@ function pull(){
     const timeSec=(liveSession&&d.sLiveSec!==undefined)?(Number(d.sLiveSec)||0):(Number(d.tSec)||0);
     const activePhases=Math.max(1,[ia,ib,ic].filter(v=>v>0.5).length||phaseCount);
     const displayCurrent=activePhases>1 ? (it/activePhases) : it;
-    const stationBase=(d.wifiAddr&&d.wifiAddr!=="-"&&d.wifiAddr!=="Bilinmiyor")
+    const stationBase=(d.geoAddr&&d.geoAddr!=="-"&&d.geoAddr!=="Bilinmiyor")
+      ? d.geoAddr
+      : ((d.wifiAddr&&d.wifiAddr!=="-"&&d.wifiAddr!=="Bilinmiyor")
       ? d.wifiAddr
-      : ((d.wifiLoc&&d.wifiLoc!=="-"&&d.wifiLoc!=="Bilinmiyor") ? d.wifiLoc : "Konum bekleniyor");
+      : ((d.wifiLoc&&d.wifiLoc!=="-"&&d.wifiLoc!=="Bilinmiyor") ? d.wifiLoc : "Konum bekleniyor"));
     chartCeil=Math.max(6,totalLimit);
     setText('it',displayCurrent.toFixed(1));
     setText('currentMetric',displayCurrent.toFixed(1));
@@ -748,7 +1021,9 @@ function pull(){
     if(d.host!==undefined) setText('host',d.host);
     setGauge(loadPct);
     setText('ts',"Son güncelleme: "+new Date().toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));
-    const wifiText=(d.wifiSsid&&d.wifiSsid!=="-") ? ("Wi-Fi: "+d.wifiSsid+((d.wifiAddr&&d.wifiAddr!=="-")?" / "+d.wifiAddr:((d.wifiLoc&&d.wifiLoc!=="-")?" / "+d.wifiLoc:""))) : "Wi-Fi: bağlı değil";
+    const wifiText=(d.wifiSsid&&d.wifiSsid!=="-")
+      ? ("Wi-Fi: "+d.wifiSsid+((d.geoAddr&&d.geoAddr!=="-")?" / "+d.geoAddr:((d.wifiAddr&&d.wifiAddr!=="-")?" / "+d.wifiAddr:((d.wifiLoc&&d.wifiLoc!=="-")?" / "+d.wifiLoc:""))))
+      : "Wi-Fi: bağlı değil";
     setText('wifiLine',wifiText);
     renderAlarm(d.alarmLv||0, d.alarmTxt||"Sistem normal", d.state||"A", !!d.staOk);
     updateCar(d);
@@ -845,7 +1120,8 @@ self.addEventListener("fetch", (event) => {
     path === "/calib_apply" ||
     path.startsWith("/relay") ||
     path === "/pulse_reset" ||
-    path === "/pulse_set";
+    path === "/pulse_set" ||
+    path === "/geo_config";
 
   if (isLiveApi) {
     event.respondWith(
@@ -1029,6 +1305,26 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
     </div>
     <div class="small">Not: GitHub kontrolu saatte bir otomatik calisir. `Factory'e don` USB ile yukledigin sabit kurtarma surumunu acar.</div>
 
+    <div class="sep"></div>
+    <h2>Yaklasik Konum</h2>
+    <div class="hintBox">
+      Cihaz kendi dis IP bilgisinden yaklasik koordinat alir, sonra OpenCage ile okunur adrese cevirir.
+      Bu yontem mahalle/ilce seviyesinde yaklasik sonuc verir; kapi numarasini garanti etmez.
+    </div>
+    <div class="kv"><div class="k">Durum</div><div class="v mono"><span id="geoStatus">-</span></div></div>
+    <div class="kv"><div class="k">Adres</div><div class="v mono"><span id="geoAddr">-</span></div></div>
+    <div class="kv"><div class="k">Kaynak</div><div class="v mono"><span id="geoSource">-</span></div></div>
+    <div class="kv"><div class="k">Koordinat</div><div class="v mono"><span id="geoLatLng">-</span></div></div>
+    <div class="kv"><div class="k">Son yenileme</div><div class="v mono"><span id="geoAge">-</span></div></div>
+    <div class="kv"><div class="k">Hata</div><div class="v mono"><span id="geoErr">Hata yok</span></div></div>
+    <div class="kv"><div class="k">OpenCage key</div><div class="v"><input id="geoKey" type="password" placeholder="Cihaza kaydedilecek OpenCage key" onfocus="p()" onblur="r()"></div></div>
+    <div class="small">Anahtar repoya yazilmaz; sadece kartin icindeki ayara kaydedilir.</div>
+    <div class="btns" style="margin-top:10px">
+      <button class="primary" onclick="saveGeoKey()">KEY KAYDET</button>
+      <button onclick="refreshGeo()">KONUMU YENILE</button>
+      <button class="danger" onclick="clearGeoKey()">KEY SIL</button>
+    </div>
+
 
 
   </div>
@@ -1095,6 +1391,60 @@ function runBootPrev(){
       alert(x.text || 'Diger OTA slotu secildi, cihaz yeniden baslatiliyor.');
     })
     .catch(e => alert(e.message || 'Onceki OTA gecisi basarisiz'));
+}
+
+function geoFormBody(parts){
+  return Object.entries(parts)
+    .map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
+    .join('&');
+}
+
+function saveGeoKey(){
+  const input = document.getElementById('geoKey');
+  const key = (input && input.value ? input.value : '').trim();
+  if(!key){
+    alert('OpenCage key gir.');
+    return;
+  }
+  fetch('/geo_config', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:geoFormBody({key:key, refresh:1})
+  })
+    .then(r => r.json())
+    .then(() => {
+      if(input) input.value = '';
+      pull(true);
+      alert('OpenCage key kaydedildi, konum yenileniyor.');
+    })
+    .catch(() => alert('OpenCage key kaydedilemedi.'));
+}
+
+function refreshGeo(){
+  fetch('/geo_config', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:geoFormBody({refresh:1})
+  })
+    .then(r => r.json())
+    .then(() => pull(true))
+    .catch(() => alert('Konum yenileme basarisiz.'));
+}
+
+function clearGeoKey(){
+  if(!confirm('OpenCage key silinsin ve geocode onbellegi temizlensin mi?')) return;
+  fetch('/geo_config', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:geoFormBody({clear:1})
+  })
+    .then(r => r.json())
+    .then(() => {
+      const input = document.getElementById('geoKey');
+      if(input) input.value = '';
+      pull(true);
+    })
+    .catch(() => alert('OpenCage key silinemedi.'));
 }
 
 function fillClampLow(){
@@ -1174,6 +1524,16 @@ function pull(force=false){
     const liveVals = [liveA, liveB, liveC].filter(v => v > 0.1);
     const liveAvg = liveVals.length ? (liveVals.reduce((sum, v) => sum + v, 0) / liveVals.length) : 0;
     document.getElementById('liveIAvg').textContent = liveAvg.toFixed(2);
+    document.getElementById('geoStatus').textContent = d.geoStatus || '-';
+    document.getElementById('geoAddr').textContent = d.geoAddr || '-';
+    document.getElementById('geoSource').textContent = d.geoSource || '-';
+    document.getElementById('geoErr').textContent = (d.geoErr && d.geoErr.length) ? d.geoErr : 'Hata yok';
+    document.getElementById('geoAge').textContent = fmtOtaAge(d.geoAgeMs);
+    const geoLat = Number(d.geoLat) || 0;
+    const geoLng = Number(d.geoLng) || 0;
+    document.getElementById('geoLatLng').textContent = (geoLat || geoLng) ? (geoLat.toFixed(5) + ', ' + geoLng.toFixed(5)) : '-';
+    const geoKeyInput = document.getElementById('geoKey');
+    if(geoKeyInput) geoKeyInput.placeholder = d.geoKeySet ? 'OpenCage key kayitli' : 'Cihaza kaydedilecek OpenCage key';
 
     // Ust rozetler
     const st = (d.state || "-");
@@ -1302,6 +1662,66 @@ static void handleAppIcon() { server.send_P(200, "image/svg+xml", APP_ICON_SVG);
 static void handleOtaCheck() {
   OTA_Manager::triggerCheckNow();
   server.send(200, "application/json", "{\"ok\":1}");
+}
+
+static void sendGeoConfigResponse(bool ok) {
+  String body;
+  body.reserve(512);
+  body += "{\"ok\":";
+  body += ok ? '1' : '0';
+  body += ",\"geoKeySet\":";
+  body += geoKeyConfigured() ? '1' : '0';
+  body += ",\"geoStatus\":\"";
+  body += jsonEscape(s_geo.status.length() ? s_geo.status : (geoKeyConfigured() ? "bekleniyor" : "anahtar_yok"));
+  body += "\",\"geoAddr\":\"";
+  body += jsonEscape(s_geo.address.length() ? s_geo.address : "-");
+  body += "\",\"geoSource\":\"";
+  body += jsonEscape(s_geo.source.length() ? s_geo.source : "-");
+  body += "\",\"geoErr\":\"";
+  body += jsonEscape(s_geo.error);
+  body += "\",\"geoLat\":";
+  body += String(s_geo.lat, 6);
+  body += ",\"geoLng\":";
+  body += String(s_geo.lng, 6);
+  body += "}";
+  server.send(ok ? 200 : 500, "application/json", body);
+}
+
+static void handleGeoConfig() {
+  if (!requireAdminAuth()) return;
+
+  bool ok = true;
+  bool shouldRefresh = false;
+
+  if (server.hasArg("clear") && server.arg("clear") == "1") {
+    clearGeoState(false);
+    saveGeoState();
+    scheduleGeoRefresh(kGeoRetryMs);
+    sendGeoConfigResponse(true);
+    return;
+  }
+
+  if (server.hasArg("key")) {
+    String key = server.arg("key");
+    key.trim();
+    s_geo.apiKey = key;
+    if (s_geo.status.length() == 0 || s_geo.status == "anahtar_yok") {
+      s_geo.status = geoKeyConfigured() ? "bekleniyor" : "anahtar_yok";
+    }
+    s_geo.error = "";
+    saveGeoState();
+    shouldRefresh = geoKeyConfigured();
+  }
+
+  if (server.hasArg("refresh") && server.arg("refresh") == "1") {
+    shouldRefresh = true;
+  }
+
+  if (shouldRefresh) {
+    ok = refreshGeoFromIp(true);
+  }
+
+  sendGeoConfigResponse(ok);
 }
 
 static void scheduleDeferredRestart() {
@@ -1509,6 +1929,11 @@ static void handleStatus() {
   String wifiSsid = "-";
   String wifiLoc = "-";
   String wifiAddr = "-";
+  String geoAddr = s_geo.address.length() ? s_geo.address : "-";
+  String geoSource = s_geo.source.length() ? s_geo.source : "-";
+  String geoStatus = s_geo.status.length() ? s_geo.status : (geoKeyConfigured() ? "bekleniyor" : "anahtar_yok");
+  String geoErr = s_geo.error;
+  uint32_t geoAgeMs = s_geo.updatedAtMs ? (nowMs - s_geo.updatedAtMs) : 0;
   String ipStr = "-";
   String hostStr = String(kHostName) + ".local";
   bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
@@ -1534,6 +1959,11 @@ static void handleStatus() {
     ipStr = WiFi.localIP().toString();
   }
 
+  geoAddr = jsonEscape(geoAddr);
+  geoSource = jsonEscape(geoSource);
+  geoStatus = jsonEscape(geoStatus);
+  geoErr = jsonEscape(geoErr);
+
   int alarmLv = 0;
   const char* alarmTxt = "Sistem normal";
   bool manualStopAlertOn = (g_manualStopAlertUntilMs != 0 && ((int32_t)(g_manualStopAlertUntilMs - nowMs) > 0));
@@ -1558,6 +1988,7 @@ static void handleStatus() {
     "\"stateRaw\":\"%s\",\"ia\":%.2f,\"ib\":%.2f,\"ic\":%.2f,"
     "\"pW\":%.1f,\"eKWh\":%.3f,\"tSec\":%lu,\"phase\":%d,\"rLbl\":\"%s\","
     "\"wifiSsid\":\"%s\",\"wifiLoc\":\"%s\",\"wifiAddr\":\"%s\",\"ip\":\"%s\",\"host\":\"%s\","
+    "\"geoAddr\":\"%s\",\"geoSource\":\"%s\",\"geoStatus\":\"%s\",\"geoErr\":\"%s\",\"geoAgeMs\":%lu,\"geoLat\":%.6f,\"geoLng\":%.6f,\"geoAccM\":%.1f,\"geoKeySet\":%d,"
     "\"state\":\"%s\",\"div\":%.3f,\"thb\":%.2f,\"thc\":%.2f,\"thd\":%.2f,\"the\":%.2f,"
     "\"icalA\":%.2f,\"icalB\":%.2f,\"icalC\":%.2f,\"ioffA\":%.2f,\"ioffB\":%.2f,\"ioffC\":%.2f,"
     "\"rngLowMax\":%.2f,\"rngMidMax\":%.2f,\"rngLowOff\":%.2f,\"rngMidOff\":%.2f,"
@@ -1584,6 +2015,15 @@ static void handleStatus() {
     wifiAddr.c_str(),
     ipStr.c_str(),
     hostStr.c_str(),
+    geoAddr.c_str(),
+    geoSource.c_str(),
+    geoStatus.c_str(),
+    geoErr.c_str(),
+    (unsigned long)geoAgeMs,
+    safeFinite(s_geo.lat),
+    safeFinite(s_geo.lng),
+    safeFinite(s_geo.accuracyM),
+    geoKeyConfigured() ? 1 : 0,
     m.stateStable.c_str(),
     CP_DIVIDER_RATIO,
     TH_B_MIN, TH_C_MIN, TH_D_MIN, TH_E_MIN,
@@ -1807,6 +2247,13 @@ void web_init() {
   } else {
     Serial.println("[RST] NVS init fail");
   }
+  s_geoPrefsReady = s_geoPrefs.begin("evsegeo", false);
+  if (s_geoPrefsReady) {
+    loadGeoState();
+  } else {
+    Serial.println("[GEO] NVS init fail");
+  }
+  scheduleGeoRefresh(kGeoBootDelayMs);
   pinMode(MOSFET_RESET_PIN, OUTPUT);
   pinMode(MOSFET_SET_PIN, OUTPUT);
   digitalWrite(MOSFET_RESET_PIN, LOW);
@@ -1824,6 +2271,7 @@ void web_init() {
   server.on("/ota_check", HTTP_GET, handleOtaCheck);
   server.on("/boot_factory", HTTP_GET, handleBootFactory);
   server.on("/boot_prev", HTTP_GET, handleBootPrev);
+  server.on("/geo_config", HTTP_POST, handleGeoConfig);
   // Captive portal probe endpoints (Android/iOS/Windows)
   server.on("/generate_204", HTTP_GET, handleRoot);
   server.on("/hotspot-detect.html", HTTP_GET, handleRoot);
@@ -1860,6 +2308,15 @@ void web_loop() {
   if (WiFi.status() != WL_CONNECTED && (nowTry - lastWifiTryMs >= 30000)) {
     lastWifiTryMs = nowTry;
     wifiMulti.run(120);
+  }
+
+  bool geoDue =
+      s_geoNextRefreshMs != 0 &&
+      geoKeyConfigured() &&
+      (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0) &&
+      (int32_t)(millis() - s_geoNextRefreshMs) >= 0;
+  if (geoDue) {
+    refreshGeoFromIp(false);
   }
 
   static bool printed = false;
