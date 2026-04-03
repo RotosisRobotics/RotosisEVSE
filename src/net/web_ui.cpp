@@ -815,14 +815,6 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 .carWrap{position:relative;max-width:352px;min-height:150px;margin:0 auto -18px;display:flex;align-items:center;justify-content:center;isolation:isolate;transform:translateY(-16px);}
 .carWrap::before{content:"";position:absolute;inset:13% 5% 15%;border-radius:34px;background:linear-gradient(180deg,rgba(18,43,62,.74),rgba(7,20,31,.28));border:1px solid rgba(172,244,221,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(13px);z-index:0;}
 .carWrap::after{content:"";position:absolute;left:14%;right:14%;bottom:10%;height:58px;border-radius:999px;background:radial-gradient(ellipse at center, rgba(42,221,169,.18) 0%, rgba(42,221,169,.09) 30%, rgba(6,16,26,0) 74%),radial-gradient(ellipse at center, rgba(4,12,20,.5) 0%, rgba(4,12,20,.2) 42%, rgba(4,12,20,0) 76%);filter:blur(8px);z-index:1;animation:platformPulse 6.5s ease-in-out infinite;}
-.carHalo{position:absolute;inset:8% 6% 12%;border-radius:48px;background:radial-gradient(circle at 50% 48%, rgba(210,255,243,.18) 0%, color-mix(in srgb,var(--accent) 48%, white) 22%, rgba(65,177,255,.16) 52%, rgba(255,255,255,0) 82%);filter:blur(14px);opacity:.94;z-index:2;animation:haloBreath 6.2s ease-in-out infinite;}
-.carFill{position:absolute;inset:0;--fillColor:rgba(124,210,112,.86);--alpha:0;--car-img:none;-webkit-mask-image:var(--car-img);mask-image:var(--car-img);-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;overflow:hidden;opacity:var(--alpha);transition:opacity .7s ease;z-index:3;}
-.carFillInner{position:absolute;left:0;right:0;bottom:0;height:0%;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 46%, white) 0%, var(--accent) 48%, var(--accentDeep) 100%);box-shadow:0 0 28px color-mix(in srgb,var(--accentDeep) 32%, transparent) inset;transition:height .55s ease,background-color .55s ease,opacity .4s ease,filter .4s ease;}
-.carFill.stateA{--alpha:.38;--fillColor:rgba(102,199,255,.82)}
-.carFill.stateA .carFillInner{height:18%;opacity:.94;filter:saturate(1.12) brightness(1.05);}
-.carFill.stateB{--alpha:.72;--fillColor:rgba(122,230,196,.86)}
-.carFill.stateC,.carFill.stateD{--alpha:1;--fillColor:rgba(55,216,162,.92)}
-.carFill.stateE,.carFill.stateF{--alpha:1;--fillColor:rgba(255,125,125,.92)}
 .carSvg{position:relative;z-index:4;width:112%;max-width:372px;height:auto;display:block;transform:translateY(8px);filter:drop-shadow(0 22px 24px rgba(1,9,16,.30));animation:carFloat 7s ease-in-out infinite}
 .flow{animation:flow 2s linear infinite}
 .stationFocus{position:relative;z-index:4;width:max-content;max-width:100%;margin:18px auto 16px;display:grid;justify-items:center;gap:10px;pointer-events:none;animation:fadeLift .96s .22s both;}
@@ -855,7 +847,6 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 @keyframes fadeLift{0%{opacity:0;transform:translateY(14px)}100%{opacity:1;transform:translateY(0)}}
 @keyframes floatGlowA{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(22px,18px,0) scale(1.08)}}
 @keyframes floatGlowB{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-18px,-14px,0) scale(1.1)}}
-@keyframes haloBreath{0%,100%{opacity:.78;transform:scale(.98)}50%{opacity:1;transform:scale(1.03)}}
 @keyframes carFloat{0%,100%{transform:translate(-5px,-2px)}50%{transform:translate(-5px,-7px)}}
 @keyframes flow{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 @keyframes platformPulse{0%,100%{opacity:.78;transform:scaleX(.96)}50%{opacity:1;transform:scaleX(1.02)}}
@@ -1018,45 +1009,11 @@ if(gaugeRing){
   gaugeRing.style.strokeDashoffset=gaugeCirc.toFixed(1);
 }
 const carEls={
-  carSvg:document.getElementById("carSvg"),
-  carFill:document.getElementById("carFill"),
-  carFillInner:document.getElementById("carFillInner"),
   chargeBar:document.getElementById("chargeBar"),
   chargeBarInner:document.getElementById("chargeBarInner")
 };
-const BAT_KWH=80;
-const CAR_IMG_SRC=(carEls.carSvg&&carEls.carSvg.getAttribute("src"))?carEls.carSvg.getAttribute("src"):"";
-if(CAR_IMG_SRC&&carEls.carFill){
-  carEls.carFill.style.setProperty('--car-img','url('+CAR_IMG_SRC+')');
-}
 function escapeHtml(value){
   return String(value||"").replace(/[&<>"']/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
-}
-function updateCar(d){
-  if(!carEls.carFill||!carEls.carFillInner) return;
-  const st=(d.state||"-");
-  const charging=(st==="C"||st==="D");
-  const isCable=(st==="B");
-  const isError=(st==="E"||st==="F");
-  carEls.carFill.classList.remove("stateA","stateB","stateC","stateD","stateE","stateF");
-  if(st==="A") carEls.carFill.classList.add("stateA");
-  else if(st==="B") carEls.carFill.classList.add("stateB");
-  else if(st==="C") carEls.carFill.classList.add("stateC");
-  else if(st==="D") carEls.carFill.classList.add("stateD");
-  else if(st==="E") carEls.carFill.classList.add("stateE");
-  else if(st==="F") carEls.carFill.classList.add("stateF");
-  if(st==="A"){
-    carEls.carFillInner.style.height="";
-    return;
-  }
-  const socVal=Number.isFinite(d.soc)?d.soc:(Number.isFinite(d.batt)?d.batt:null);
-  let pctRaw=Number.isFinite(socVal)?socVal:Math.round((Number(d.eKWh)||0)/BAT_KWH*100);
-  pctRaw=Math.max(0,Math.min(100,pctRaw));
-  let fillPct=pctRaw;
-  if(charging) fillPct=Math.max(fillPct,8);
-  else if(isCable) fillPct=Math.max(fillPct,12);
-  else if(isError) fillPct=Math.max(fillPct,24);
-  carEls.carFillInner.style.height=Math.max(0,Math.min(100,fillPct))+"%";
 }
 function fmtTime(sec){
   const totalSec=Math.max(0,Number(sec)||0);
@@ -1488,7 +1445,6 @@ function pull(){
     setGauge(loadPct);
     setText('ts',"Son güncelleme: "+new Date().toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));
     renderAlarm(d.alarmLv||0, d.alarmTxt||"Sistem normal", d.state||"A", !!d.staOk);
-    updateCar(d);
     pushLivePoint(displayCurrent);
     updateDateLabel();
     setSync(true);
@@ -1519,12 +1475,6 @@ window.addEventListener("load",()=>{
   refreshStationFocus();
   setTimeout(refreshStationFocus,180);
 });
-if(carEls.carSvg&&carEls.carSvg.addEventListener){
-  carEls.carSvg.addEventListener("load",()=>{
-    refreshStationFocus();
-    setTimeout(refreshStationFocus,160);
-  });
-}
 setInterval(pull,POLL_MS);
 setInterval(updateDateLabel,30000);
 pull();
