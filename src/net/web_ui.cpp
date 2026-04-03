@@ -1643,6 +1643,7 @@ body{font-family:Arial;margin:0;background:#09111d;color:#e8eefc}
 .wrap{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:12px;padding:12px}
 @media(max-width:960px){.wrap{grid-template-columns:1fr}}
 .card{background:#111a2b;border:1px solid #20304a;border-radius:14px;padding:12px}
+.navCard{grid-column:1/-1}
 h2{margin:0 0 10px 0;font-size:14px;color:#b7c5e6}
 .kv{display:grid;grid-template-columns:150px 1fr;gap:8px;margin:6px 0}
 @media(max-width:560px){.kv{grid-template-columns:1fr}}
@@ -1663,15 +1664,32 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 @media(max-width:680px){.grid3,.grid2{grid-template-columns:1fr}}
 .hintBox{padding:10px 12px;border-radius:12px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.18);color:#bde9dd;font-size:12px;line-height:1.55}
+.pageSection{display:block}
+.navRow{display:flex;flex-wrap:wrap;gap:8px}
+.navBtn{display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#0c1424;color:#e8eefc;text-decoration:none}
+.navBtn.active{background:rgba(0,200,150,.18);border-color:rgba(0,200,150,.45)}
 </style></head><body>
 
 <div class="wrap">
-  <div class="card">
+  <div class="card navCard">
+    <h2>YONLENDIRME</h2>
+    <div class="navRow">
+      <a id="navAdmin" class="navBtn" href="/admin">CANLI PANEL</a>
+      <a id="navCalibration" class="navBtn" href="/calibration">KALIBRASYON</a>
+      <a id="navWifi" class="navBtn" href="/wifi">WIFI AYARLARI</a>
+      <a class="navBtn" href="/">KULLANICI EKRANI</a>
+    </div>
+    <div class="small" style="margin-top:10px">Admin panelde sadece canli veriler tutulur. Ayarlar ayri pencerelerden yonetilir.</div>
+  </div>
+
+  <div class="card pageSection" id="liveCard">
     <h2>CANLI VERILER</h2>
     <div class="kv"><div class="k">State (Stable/Raw)</div><div class="v mono"><span id="sStb">-</span> / <span id="sRaw">-</span></div></div>
     <div class="kv"><div class="k">CP High / Low</div><div class="v mono"><span id="cH">-</span> / <span id="cL">-</span></div></div>
     <div class="kv"><div class="k">ADC High / Low</div><div class="v mono"><span id="aH">-</span> / <span id="aL">-</span></div></div>
+  </div>
 
+  <div class="card pageSection" id="calibrationCard">
     <div class="sep"></div>
     <h2>ZAMANLAMA</h2>
     <div class="kv"><div class="k">Loop dongusu (ms)</div><div class="v"><input id="lInt" onfocus="p()" onblur="r()"></div></div>
@@ -1708,14 +1726,19 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
     <div class="btns"><button onclick="fillClampMid()">Pens A/B/C ile offset doldur</button></div>
     <div class="small">Ilk buton her faz icin girilen pens degerine gore `Ical A/B/C` alanlarini ayarlar. Ikinci buton her fazin pens-ekran farkina gore `Offset A/B/C` alanlarini doldurur.</div>
 
+    <div class="sep"></div>
+    <h2>ISTASYON KONUMU</h2>
+    <div class="kv"><div class="k">Latitude / Longitude</div><div class="v grid2"><input id="mapLat" onfocus="p()" onblur="r()" placeholder="37.94559"><input id="mapLng" onfocus="p()" onblur="r()" placeholder="32.58082"></div></div>
+    <div class="kv"><div class="k">Uretilen adres</div><div class="v mono"><span id="stationAddr">-</span></div></div>
+    <div class="small">Konum kaydedildiginde harita merkezi ve istasyon adres metni bu koordinatlara gore guncellenir.</div>
+
     <div class="btns" style="margin-top:12px">
       <button class="primary" onclick="applyCal()">UYGULA</button>
       <button onclick="pull(true)">YENILE</button>
-      <button onclick="window.location='/'">KULLANICI EKRANI</button>
     </div>
   </div>
 
-  <div class="card">
+  <div class="card pageSection" id="statusCard">
     <div class="hero" id="displayPanel">
       <div class="heroTop">
         <div style="display:flex;gap:8px;align-items:center">
@@ -1734,16 +1757,9 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
       <div class="kv"><div class="k">Host</div><div class="v mono"><span id="host">-</span></div></div>
     <div class="kv"><div class="k">Relay</div><div class="v mono"><span id="rLbl">-</span></div></div>
     </div>
+  </div>
 
-    <div class="sep"></div>
-
-    <h2>ISTASYON KONUMU</h2>
-    <div class="kv"><div class="k">Latitude / Longitude</div><div class="v grid2"><input id="mapLat" onfocus="p()" onblur="r()" placeholder="37.94559"><input id="mapLng" onfocus="p()" onblur="r()" placeholder="32.58082"></div></div>
-    <div class="kv"><div class="k">Uretilen adres</div><div class="v mono"><span id="stationAddr">-</span></div></div>
-    <div class="small">Konum kaydedildiginde harita merkezi ve istasyon adres metni bu koordinatlara gore guncellenir.</div>
-
-    <div class="sep"></div>
-
+  <div class="card pageSection" id="wifiCard">
     <h2>WIFI BAGLANTISI</h2>
     <div class="kv"><div class="k">Ozel profil</div><div class="v"><label><input type="checkbox" id="wifiEnabled" onfocus="p()" onblur="r()"> Etkin</label></div></div>
     <div class="kv"><div class="k">SSID / Sifre</div><div class="v grid2"><input id="wifiSsidCfg" onfocus="p()" onblur="r()" placeholder="SSID"><input id="wifiPassCfg" type="password" onfocus="p()" onblur="r()" placeholder="Sifre"></div></div>
@@ -1760,7 +1776,9 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
     <div class="small" id="wifiScanStatus">Tarama hazir degil</div>
     <div class="small" id="wifiCurrentMode">Baglanti profili: varsayilan liste</div>
     <div id="wifiScanList" class="small"></div>
+  </div>
 
+  <div class="card pageSection" id="opsCard">
     <div class="sep"></div>
 
     <h2>ROLE</h2>
@@ -1805,6 +1823,7 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
 </div>
 
 <script>
+const PAGE_MODE="__PAGE_MODE__";
 let paused = false;
 let t;
 
@@ -1877,6 +1896,31 @@ function applyWifiStatus(d){
     modeLine.textContent = d.wifiCfgEnabled
       ? ('Baglanti profili: ' + (d.wifiCfgSsid || '-') + ' / ' + ((d.wifiCfgMode || 'dhcp').toUpperCase()))
       : 'Baglanti profili: varsayilan liste';
+  }
+}
+function showSection(id, visible){
+  const el=document.getElementById(id);
+  if(el) el.style.display=visible?'block':'none';
+}
+function setActiveNav(id){
+  ['navAdmin','navCalibration','navWifi'].forEach((navId)=>{
+    const el=document.getElementById(navId);
+    if(el) el.classList.toggle('active', navId===id);
+  });
+}
+function applyPageMode(){
+  const mode=PAGE_MODE || 'admin';
+  showSection('liveCard', true);
+  showSection('statusCard', true);
+  showSection('calibrationCard', mode==='calibration');
+  showSection('wifiCard', mode==='wifi');
+  showSection('opsCard', mode==='calibration');
+  if(mode==='wifi'){
+    setActiveNav('navWifi');
+  }else if(mode==='calibration'){
+    setActiveNav('navCalibration');
+  }else{
+    setActiveNav('navAdmin');
   }
 }
 function renderWifiScanList(items){
@@ -2104,6 +2148,7 @@ function applyCal(){
     pull(true);
   });
 }
+applyPageMode();
 setInterval(() => pull(false), 3000);
 pull(true);
 </script>
@@ -2185,12 +2230,17 @@ static void handleRoot() {
   noteHttpResponseSent();
   server.send_P(200, "text/html", USER_HTML);
 }
-static void handleAdmin() {
+static void sendMainPage(const char* pageMode) {
   noteWebActivity();
   if (!requireAdminAuth()) return;
+  String html(FPSTR(MAIN_HTML));
+  html.replace("__PAGE_MODE__", pageMode ? pageMode : "admin");
   noteHttpResponseSent();
-  server.send_P(200, "text/html", MAIN_HTML);
+  server.send(200, "text/html", html);
 }
+static void handleAdmin() { sendMainPage("admin"); }
+static void handleCalibrationPage() { sendMainPage("calibration"); }
+static void handleWifiPage() { sendMainPage("wifi"); }
 static void handlePing() { noteWebActivity(); noteHttpResponseSent(); server.send(200, "text/plain", "OK"); }
 static void handleManifest() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "application/manifest+json", MANIFEST_JSON); }
 static void handleServiceWorker() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "application/javascript", SERVICE_WORKER_JS); }
@@ -2880,7 +2930,9 @@ void web_init() {
   // HTTP route kayitlari.
   server.on("/", HTTP_GET, handleRoot);
   server.on("/admin", HTTP_GET, handleAdmin);
-  server.on("/settings", HTTP_GET, handleAdmin);
+  server.on("/settings", HTTP_GET, handleCalibrationPage);
+  server.on("/calibration", HTTP_GET, handleCalibrationPage);
+  server.on("/wifi", HTTP_GET, handleWifiPage);
   server.on("/update", HTTP_GET, handleManualUpdatePage);
   server.on("/update", HTTP_POST, handleManualUpdateResult, handleManualUpdateUpload);
   server.on("/ping", HTTP_GET, handlePing);
