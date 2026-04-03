@@ -162,6 +162,17 @@ static char s_hostName[32] = EVSE_HOSTNAME;
 static char s_stationAddress[160] = "";
 static double s_mapLat = kDefaultMapLat;
 static double s_mapLng = kDefaultMapLng;
+static bool s_customWifiEnabled = false;
+static bool s_wifiUseDhcp = true;
+static String s_customWifiSsid;
+static String s_customWifiPassword;
+static IPAddress s_staticIp(192, 168, 1, 200);
+static IPAddress s_staticGateway(192, 168, 1, 1);
+static IPAddress s_staticSubnet(255, 255, 255, 0);
+static IPAddress s_staticDns1(8, 8, 8, 8);
+static IPAddress s_staticDns2(1, 1, 1, 1);
+static uint32_t s_lastWifiScanMs = 0;
+static String s_lastWifiScanJson = "{\"items\":[]}";
 
 struct KnownWifi {
   const char* location;
@@ -194,6 +205,8 @@ static uint8_t s_resetLastModeId = 0;
 static Preferences s_resetPrefs;
 static bool s_resetPrefsReady = false;
 static void web_task_runner(void* arg);
+static void refreshDeviceIdentity();
+static const char* currentHostName();
 
 struct ManualOtaState {
   bool active = false;
@@ -221,6 +234,32 @@ static bool isValidLongitude(double value) {
 
 static bool nearlyEqualCoord(double a, double b) {
   return fabs(a - b) < 0.00001;
+}
+
+static String ipToString(const IPAddress& ip) {
+  return ip.toString();
+}
+
+static bool parseIpAddressArg(const String& value, IPAddress& out) {
+  int parts[4] = {0, 0, 0, 0};
+  int part = 0;
+  int start = 0;
+  String src = value;
+  src.trim();
+  if (src.length() == 0) return false;
+
+  for (int i = 0; i <= src.length(); ++i) {
+    if (i == src.length() || src[i] == '.') {
+      if (part >= 4 || i == start) return false;
+      int v = src.substring(start, i).toInt();
+      if (v < 0 || v > 255) return false;
+      parts[part++] = v;
+      start = i + 1;
+    }
+  }
+  if (part != 4) return false;
+  out = IPAddress(parts[0], parts[1], parts[2], parts[3]);
+  return true;
 }
 
 static void rebuildStationAddress() {
@@ -314,6 +353,78 @@ static void saveLocationSettings() {
   s_resetPrefs.putDouble("mapLat", s_mapLat);
   s_resetPrefs.putDouble("mapLng", s_mapLng);
   s_resetPrefs.putString("mapAddr", s_stationAddress);
+}
+
+static void loadWifiSettings() {
+  if (!s_resetPrefsReady) return;
+  s_customWifiEnabled = s_resetPrefs.getBool("wifi_en", false);
+  s_wifiUseDhcp = s_resetPrefs.getBool("wifi_dhcp", true);
+  s_customWifiSsid = s_resetPrefs.getString("wifi_ssid", "");
+  s_customWifiPassword = s_resetPrefs.getString("wifi_pass", "");
+
+  IPAddress parsed;
+  if (parseIpAddressArg(s_resetPrefs.getString("wifi_ip", "192.168.1.200"), parsed)) s_staticIp = parsed;
+  if (parseIpAddressArg(s_resetPrefs.getString("wifi_gw", "192.168.1.1"), parsed)) s_staticGateway = parsed;
+  if (parseIpAddressArg(s_resetPrefs.getString("wifi_sub", "255.255.255.0"), parsed)) s_staticSubnet = parsed;
+  if (parseIpAddressArg(s_resetPrefs.getString("wifi_d1", "8.8.8.8"), parsed)) s_staticDns1 = parsed;
+  if (parseIpAddressArg(s_resetPrefs.getString("wifi_d2", "1.1.1.1"), parsed)) s_staticDns2 = parsed;
+}
+
+static void saveWifiSettings() {
+  if (!s_resetPrefsReady) return;
+  s_resetPrefs.putBool("wifi_en", s_customWifiEnabled);
+  s_resetPrefs.putBool("wifi_dhcp", s_wifiUseDhcp);
+  s_resetPrefs.putString("wifi_ssid", s_customWifiSsid);
+  s_resetPrefs.putString("wifi_pass", s_customWifiPassword);
+  s_resetPrefs.putString("wifi_ip", ipToString(s_staticIp));
+  s_resetPrefs.putString("wifi_gw", ipToString(s_staticGateway));
+  s_resetPrefs.putString("wifi_sub", ipToString(s_staticSubnet));
+  s_resetPrefs.putString("wifi_d1", ipToString(s_staticDns1));
+  s_resetPrefs.putString("wifi_d2", ipToString(s_staticDns2));
+}
+
+static void rebuildKnownWifiList() {
+  wifiMulti = WiFiMulti();
+  for (size_t i = 0; i < (sizeof(kKnownWifis) / sizeof(kKnownWifis[0])); i++) {
+    if (!hasText(kKnownWifis[i].ssid)) continue;
+    wifiMulti.addAP(kKnownWifis[i].ssid, kKnownWifis[i].password);
+  }
+}
+
+static void applyIpMode() {
+  if (s_customWifiEnabled && !s_wifiUseDhcp) {
+    WiFi.config(s_staticIp, s_staticGateway, s_staticSubnet, s_staticDns1, s_staticDns2);
+  } else {
+    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
+  }
+}
+
+static bool connectConfiguredWifi(uint32_t timeoutMs) {
+  if (!s_customWifiEnabled || s_customWifiSsid.length() == 0) return false;
+  applyIpMode();
+  WiFi.begin(s_customWifiSsid.c_str(), s_customWifiPassword.c_str());
+  uint32_t start = millis();
+  while ((millis() - start) < timeoutMs) {
+    if (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0) {
+      return true;
+    }
+    delay(100);
+  }
+  return false;
+}
+
+static void reconnectWifiNow() {
+  WiFi.disconnect(true, true);
+  delay(100);
+  WiFi.mode(WIFI_STA);
+  refreshDeviceIdentity();
+  WiFi.setHostname(currentHostName());
+  applyIpMode();
+  rebuildKnownWifiList();
+
+  if (s_customWifiEnabled && s_customWifiSsid.length() > 0) {
+    WiFi.begin(s_customWifiSsid.c_str(), s_customWifiPassword.c_str());
+  }
 }
 
 static void loadCurrentLimitSetting() {
@@ -430,6 +541,15 @@ static float clampFloatArg(const String& v, float minVal, float maxVal, float fa
 static float safeFinite(float v) {
   if (isnan(v) || isinf(v)) return 0.0f;
   return v;
+}
+
+static String jsonEscape(const String& value) {
+  String out = value;
+  out.replace("\\", "\\\\");
+  out.replace("\"", "\\\"");
+  out.replace("\n", "\\n");
+  out.replace("\r", "");
+  return out;
 }
 
 struct DisplayCurrentState {
@@ -1394,6 +1514,7 @@ if("serviceWorker" in navigator){
 setupMapUi();
 renderLiveChart();
 updateDateLabel();
+toggleWifiModeFields();
 window.addEventListener("load",()=>{
   refreshStationFocus();
   setTimeout(refreshStationFocus,180);
@@ -1528,7 +1649,7 @@ h2{margin:0 0 10px 0;font-size:14px;color:#b7c5e6}
 .k{color:#b7c5e6;font-size:12px}
 .v{font-weight:700}
 .mono{font-family:monospace;color:#00ffaa}
-input{width:100%;padding:8px;border-radius:10px;border:1px solid #20304a;background:#0c1424;color:#e8eefc;box-sizing:border-box}
+input,select{width:100%;padding:8px;border-radius:10px;border:1px solid #20304a;background:#0c1424;color:#e8eefc;box-sizing:border-box}
 .btns{display:flex;flex-wrap:wrap;gap:8px}
 button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#0c1424;color:#e8eefc;cursor:pointer}
 .primary{background:rgba(0,200,150,.18);border-color:rgba(0,200,150,.45)}
@@ -1623,6 +1744,25 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
 
     <div class="sep"></div>
 
+    <h2>WIFI BAGLANTISI</h2>
+    <div class="kv"><div class="k">Ozel profil</div><div class="v"><label><input type="checkbox" id="wifiEnabled" onfocus="p()" onblur="r()"> Etkin</label></div></div>
+    <div class="kv"><div class="k">SSID / Sifre</div><div class="v grid2"><input id="wifiSsidCfg" onfocus="p()" onblur="r()" placeholder="SSID"><input id="wifiPassCfg" type="password" onfocus="p()" onblur="r()" placeholder="Sifre"></div></div>
+    <div class="kv"><div class="k">IP modu</div><div class="v"><select id="wifiModeCfg" onfocus="p()" onblur="r()" onchange="toggleWifiModeFields()"><option value="dhcp">DHCP</option><option value="static">Statik</option></select></div></div>
+    <div id="wifiStaticFields">
+      <div class="kv"><div class="k">IP / Gateway</div><div class="v grid2"><input id="wifiIpCfg" onfocus="p()" onblur="r()" placeholder="192.168.1.200"><input id="wifiGwCfg" onfocus="p()" onblur="r()" placeholder="192.168.1.1"></div></div>
+      <div class="kv"><div class="k">Subnet / DNS1</div><div class="v grid2"><input id="wifiSubnetCfg" onfocus="p()" onblur="r()" placeholder="255.255.255.0"><input id="wifiDns1Cfg" onfocus="p()" onblur="r()" placeholder="8.8.8.8"></div></div>
+      <div class="kv"><div class="k">DNS2</div><div class="v"><input id="wifiDns2Cfg" onfocus="p()" onblur="r()" placeholder="1.1.1.1"></div></div>
+    </div>
+    <div class="btns">
+      <button onclick="scanWifiList()">WIFI TARA</button>
+      <button class="primary" onclick="applyWifiSettings()">WIFI AYARLARINI KAYDET</button>
+    </div>
+    <div class="small" id="wifiScanStatus">Tarama hazir degil</div>
+    <div class="small" id="wifiCurrentMode">Baglanti profili: varsayilan liste</div>
+    <div id="wifiScanList" class="small"></div>
+
+    <div class="sep"></div>
+
     <h2>ROLE</h2>
     <div class="btns">
       <button class="primary" onclick="send('/relay?on=1')">MANUEL AC</button>
@@ -1677,6 +1817,11 @@ function num(v, fallback = 0){
 }
 function setInput(id, value, force){
   const el = document.getElementById(id);
+  if(!el) return;
+  if(el.type === 'checkbox'){
+    if(document.activeElement !== el || force) el.checked = !!value;
+    return;
+  }
   if(el && (document.activeElement !== el || force)) el.value = value;
 }
 function fmtTime(sec){
@@ -1710,6 +1855,79 @@ function updateOtaInstallButton(d){
   const hasUpdate=compareVersions(d.otaRemote,d.otaCur)>0;
   btn.disabled=!hasUpdate;
   btn.textContent=hasUpdate?'GUNCELLEMEYI YUKLE':'GUNCEL';
+}
+function toggleWifiModeFields(){
+  const wrap=document.getElementById('wifiStaticFields');
+  const isStatic=(document.getElementById('wifiModeCfg').value==='static');
+  if(wrap) wrap.style.display=isStatic?'block':'none';
+}
+function applyWifiStatus(d){
+  setInput('wifiEnabled', !!d.wifiCfgEnabled, true);
+  setInput('wifiSsidCfg', d.wifiCfgSsid || '', true);
+  setInput('wifiPassCfg', '', true);
+  setInput('wifiModeCfg', d.wifiCfgMode || 'dhcp', true);
+  setInput('wifiIpCfg', d.wifiCfgIp || '', true);
+  setInput('wifiGwCfg', d.wifiCfgGw || '', true);
+  setInput('wifiSubnetCfg', d.wifiCfgSubnet || '', true);
+  setInput('wifiDns1Cfg', d.wifiCfgDns1 || '', true);
+  setInput('wifiDns2Cfg', d.wifiCfgDns2 || '', true);
+  toggleWifiModeFields();
+  const modeLine=document.getElementById('wifiCurrentMode');
+  if(modeLine){
+    modeLine.textContent = d.wifiCfgEnabled
+      ? ('Baglanti profili: ' + (d.wifiCfgSsid || '-') + ' / ' + ((d.wifiCfgMode || 'dhcp').toUpperCase()))
+      : 'Baglanti profili: varsayilan liste';
+  }
+}
+function renderWifiScanList(items){
+  const host=document.getElementById('wifiScanList');
+  if(!host) return;
+  if(!items || !items.length){
+    host.innerHTML='Tarama sonucu bos';
+    return;
+  }
+  host.innerHTML=items.map((item)=>{
+    const ssid=String(item.ssid||'').replace(/[&<>"]/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[ch]));
+    return '<div style="display:flex;justify-content:space-between;gap:8px;margin:6px 0;padding:8px;border:1px solid #20304a;border-radius:10px;">'+
+      '<span>'+ssid+'</span><span>'+String(item.rssi||0)+' dBm</span><button type="button" onclick="pickWifiSsid('+JSON.stringify(String(item.ssid||''))+')">Sec</button></div>';
+  }).join('');
+}
+function pickWifiSsid(ssid){
+  const el=document.getElementById('wifiSsidCfg');
+  if(el) el.value=ssid;
+}
+function scanWifiList(){
+  const status=document.getElementById('wifiScanStatus');
+  if(status) status.textContent='Tarama yapiliyor...';
+  fetch('/wifi_scan', {cache:'no-store'})
+    .then(r=>r.json())
+    .then(d=>{
+      renderWifiScanList(d.items||[]);
+      if(status) status.textContent='Tarama tamamlandi';
+    })
+    .catch(()=>{
+      if(status) status.textContent='Tarama basarisiz';
+    });
+}
+function applyWifiSettings(){
+  const q=new URLSearchParams();
+  q.append('wifiEnabled', document.getElementById('wifiEnabled').checked ? '1' : '0');
+  q.append('wifiSsid', document.getElementById('wifiSsidCfg').value);
+  q.append('wifiPass', document.getElementById('wifiPassCfg').value);
+  q.append('wifiDhcp', document.getElementById('wifiModeCfg').value === 'static' ? '0' : '1');
+  q.append('wifiIp', document.getElementById('wifiIpCfg').value);
+  q.append('wifiGw', document.getElementById('wifiGwCfg').value);
+  q.append('wifiSubnet', document.getElementById('wifiSubnetCfg').value);
+  q.append('wifiDns1', document.getElementById('wifiDns1Cfg').value);
+  q.append('wifiDns2', document.getElementById('wifiDns2Cfg').value);
+  fetch('/wifi_apply?' + q.toString(), {cache:'no-store'})
+    .then(r=>r.json())
+    .then(()=>{
+      alert('Wi-Fi ayarlari kaydedildi. Cihaz yeniden baglanmaya calisiyor.');
+      paused=false;
+      pull(true);
+    })
+    .catch(()=>alert('Wi-Fi ayarlari kaydedilemedi'));
 }
 function runOtaCheckAdmin(){
   fetch('/ota_check', {cache:'no-store'}).then(() => {
@@ -1820,6 +2038,7 @@ function pull(force=false){
     document.getElementById('otaAge').textContent = fmtOtaAge(d.otaAgeMs);
     document.getElementById('otaError').textContent = (d.otaErr && d.otaErr.length) ? d.otaErr : 'Hata yok';
     updateOtaInstallButton(d);
+    applyWifiStatus(d);
     document.getElementById('badgeState').textContent = 'STATE:' + (d.state || '-');
     const relayBadge = document.getElementById('badgeRelay');
     relayBadge.textContent = 'R: ' + (d.rLbl || '-');
@@ -1927,9 +2146,9 @@ static void setupWiFi() {
 
   Serial.println("\nWi-Fi aglari eklendi:");
   size_t addedWifiCount = 0;
+  rebuildKnownWifiList();
   for (size_t i = 0; i < (sizeof(kKnownWifis) / sizeof(kKnownWifis[0])); i++) {
     if (!hasText(kKnownWifis[i].ssid)) continue;
-    wifiMulti.addAP(kKnownWifis[i].ssid, kKnownWifis[i].password);
     addedWifiCount++;
     Serial.printf(" - %s (%s)\n", kKnownWifis[i].location, kKnownWifis[i].ssid);
   }
@@ -1937,7 +2156,12 @@ static void setupWiFi() {
     Serial.println(" - STA listesi bos.");
   }
 
-  if (addedWifiCount > 0 && wifiMulti.run(1500) == WL_CONNECTED) {
+  bool connected = connectConfiguredWifi(5000);
+  if (!connected && addedWifiCount > 0 && wifiMulti.run(1500) == WL_CONNECTED) {
+    connected = true;
+  }
+
+  if (connected) {
     Serial.println("");
     Serial.println("WiFi Baglandi!");
     Serial.print("Konum: ");
@@ -1982,6 +2206,85 @@ static void handleOtaInstall() {
   noteWebActivity();
   if (!requireAdminAuth()) return;
   OTA_Manager::triggerInstallNow();
+  noteHttpResponseSent();
+  server.send(200, "application/json", "{\"ok\":1}");
+}
+
+static void handleWifiScan() {
+  noteWebActivity();
+  if (!requireAdminAuth()) return;
+
+  int count = WiFi.scanNetworks(false, true);
+  if (count < 0) count = 0;
+
+  String json = "{\"items\":[";
+  for (int i = 0; i < count; ++i) {
+    if (i > 0) json += ",";
+    json += "{\"ssid\":\"";
+    json += jsonEscape(WiFi.SSID(i));
+    json += "\",\"rssi\":";
+    json += String(WiFi.RSSI(i));
+    json += ",\"enc\":";
+    json += String((int)WiFi.encryptionType(i));
+    json += "}";
+  }
+  json += "]}";
+  s_lastWifiScanJson = json;
+  s_lastWifiScanMs = millis();
+  noteHttpResponseSent();
+  server.send(200, "application/json", s_lastWifiScanJson);
+}
+
+static void handleWifiApply() {
+  noteWebActivity();
+  if (!requireAdminAuth()) return;
+
+  bool changed = false;
+  if (server.hasArg("wifiEnabled")) {
+    s_customWifiEnabled = (server.arg("wifiEnabled") == "1");
+    changed = true;
+  }
+  if (server.hasArg("wifiSsid")) {
+    s_customWifiSsid = server.arg("wifiSsid");
+    s_customWifiSsid.trim();
+    changed = true;
+  }
+  if (server.hasArg("wifiPass")) {
+    s_customWifiPassword = server.arg("wifiPass");
+    changed = true;
+  }
+  if (server.hasArg("wifiDhcp")) {
+    s_wifiUseDhcp = (server.arg("wifiDhcp") != "0");
+    changed = true;
+  }
+
+  IPAddress parsed;
+  if (server.hasArg("wifiIp") && parseIpAddressArg(server.arg("wifiIp"), parsed)) {
+    s_staticIp = parsed;
+    changed = true;
+  }
+  if (server.hasArg("wifiGw") && parseIpAddressArg(server.arg("wifiGw"), parsed)) {
+    s_staticGateway = parsed;
+    changed = true;
+  }
+  if (server.hasArg("wifiSubnet") && parseIpAddressArg(server.arg("wifiSubnet"), parsed)) {
+    s_staticSubnet = parsed;
+    changed = true;
+  }
+  if (server.hasArg("wifiDns1") && parseIpAddressArg(server.arg("wifiDns1"), parsed)) {
+    s_staticDns1 = parsed;
+    changed = true;
+  }
+  if (server.hasArg("wifiDns2") && parseIpAddressArg(server.arg("wifiDns2"), parsed)) {
+    s_staticDns2 = parsed;
+    changed = true;
+  }
+
+  if (changed) {
+    saveWifiSettings();
+    reconnectWifiNow();
+  }
+
   noteHttpResponseSent();
   server.send(200, "application/json", "{\"ok\":1}");
 }
@@ -2228,6 +2531,13 @@ static void handleStatus() {
   String macStr = s_deviceMac;
   String stationCodeStr = s_stationCode;
   String stationNameStr = s_stationLabel;
+  String wifiCfgSsid = s_customWifiSsid;
+  String wifiCfgMode = s_wifiUseDhcp ? "dhcp" : "static";
+  String wifiCfgIp = ipToString(s_staticIp);
+  String wifiCfgGw = ipToString(s_staticGateway);
+  String wifiCfgSubnet = ipToString(s_staticSubnet);
+  String wifiCfgDns1 = ipToString(s_staticDns1);
+  String wifiCfgDns2 = ipToString(s_staticDns2);
   bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
   const char* otaCurrent = OTA_Manager::currentVersion();
   const char* otaRemote = OTA_Manager::lastRemoteVersion();
@@ -2266,6 +2576,7 @@ static void handleStatus() {
     "\"stateRaw\":\"%s\",\"ia\":%.2f,\"ib\":%.2f,\"ic\":%.2f,\"iAvg\":%.2f,"
     "\"pW\":%.1f,\"eKWh\":%.3f,\"tSec\":%lu,\"phase\":%d,\"rLbl\":\"%s\","
     "\"wifiSsid\":\"%s\",\"wifiLoc\":\"%s\",\"ip\":\"%s\",\"host\":\"%s\",\"mac\":\"%s\",\"stationCode\":\"%s\",\"stationName\":\"%s\",\"stationAddr\":\"%s\","
+    "\"wifiCfgEnabled\":%d,\"wifiCfgSsid\":\"%s\",\"wifiCfgMode\":\"%s\",\"wifiCfgIp\":\"%s\",\"wifiCfgGw\":\"%s\",\"wifiCfgSubnet\":\"%s\",\"wifiCfgDns1\":\"%s\",\"wifiCfgDns2\":\"%s\","
     "\"state\":\"%s\",\"div\":%.3f,\"thb\":%.2f,\"thc\":%.2f,\"thd\":%.2f,\"the\":%.2f,"
     "\"icalA\":%.2f,\"icalB\":%.2f,\"icalC\":%.2f,\"ioffA\":%.2f,\"ioffB\":%.2f,\"ioffC\":%.2f,"
     "\"rngLowMax\":%.2f,\"rngMidMax\":%.2f,\"rngLowOff\":%.2f,\"rngMidOff\":%.2f,"
@@ -2294,6 +2605,14 @@ static void handleStatus() {
     stationCodeStr.c_str(),
     stationNameStr.c_str(),
     s_stationAddress,
+    s_customWifiEnabled ? 1 : 0,
+    wifiCfgSsid.c_str(),
+    wifiCfgMode.c_str(),
+    wifiCfgIp.c_str(),
+    wifiCfgGw.c_str(),
+    wifiCfgSubnet.c_str(),
+    wifiCfgDns1.c_str(),
+    wifiCfgDns2.c_str(),
     m.stateStable.c_str(),
     CP_DIVIDER_RATIO,
     TH_B_MIN, TH_C_MIN, TH_D_MIN, TH_E_MIN,
@@ -2543,16 +2862,17 @@ static void handlePulseSet() {
 void web_init() {
   // Boot sirasinda ag, OTA, route ve web server bu noktada ayaga kalkar.
   Serial.println("[WEB] web_init start");
-  setupWiFi();
-  setupArduinoOta();
   s_resetPrefsReady = s_resetPrefs.begin("evse", false);
   if (s_resetPrefsReady) {
     loadResetStats();
   } else {
     Serial.println("[RST] NVS init fail");
   }
+  loadWifiSettings();
   loadCurrentLimitSetting();
   loadLocationSettings();
+  setupWiFi();
+  setupArduinoOta();
   pinMode(MOSFET_RESET_PIN, OUTPUT);
   pinMode(MOSFET_SET_PIN, OUTPUT);
   digitalWrite(MOSFET_RESET_PIN, LOW);
@@ -2569,6 +2889,8 @@ void web_init() {
   server.on("/app-icon.svg", HTTP_GET, handleAppIcon);
   server.on("/ota_check", HTTP_GET, handleOtaCheck);
   server.on("/ota_install", HTTP_GET, handleOtaInstall);
+  server.on("/wifi_scan", HTTP_GET, handleWifiScan);
+  server.on("/wifi_apply", HTTP_GET, handleWifiApply);
   server.on("/boot_factory", HTTP_GET, handleBootFactory);
   server.on("/boot_prev", HTTP_GET, handleBootPrev);
   // Captive portal probe endpoints (Android/iOS/Windows)
@@ -2625,7 +2947,12 @@ static void web_tick() {
   const uint32_t nowTry = millis();
   if (WiFi.status() != WL_CONNECTED && (nowTry - lastWifiTryMs >= 10000)) {
     lastWifiTryMs = nowTry;
-    wifiMulti.run(1000);
+    if (s_customWifiEnabled && s_customWifiSsid.length() > 0) {
+      applyIpMode();
+      WiFi.begin(s_customWifiSsid.c_str(), s_customWifiPassword.c_str());
+    } else {
+      wifiMulti.run(1000);
+    }
   }
 
   static bool printed = false;
