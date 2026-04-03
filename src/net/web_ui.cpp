@@ -2,15 +2,11 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 
-#include <ArduinoJson.h>
-#include <HTTPClient.h>
 #include <WebServer.h>
 #include <Update.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
-#include <WiFiClientSecure.h>
 #include <esp_ota_ops.h>
-#include <ctype.h>
 #include <math.h>
 
 #include "app_config.h"
@@ -62,14 +58,6 @@ extern int g_histCount;
 extern int g_histHead;
 extern void resetChargeData(bool clearHistory);
 extern void resetHistoryData();
-extern int factoryButtonPin();
-extern bool factoryButtonIsPressed();
-extern uint32_t factoryButtonHoldMs();
-extern bool factoryButtonRestartPending();
-extern uint8_t factoryQuickResetStreak();
-extern bool factoryQuickResetClearArmed();
-extern uint32_t factoryQuickResetClearRemainingMs();
-extern int factoryLastResetReason();
 
 static void pulseGpio(uint8_t pin) {
   digitalWrite(pin, HIGH);
@@ -108,9 +96,6 @@ static void pulseGpio(uint8_t pin) {
 #ifndef EVSE_WIFI_1_LOC
 #define EVSE_WIFI_1_LOC "Ev"
 #endif
-#ifndef EVSE_WIFI_1_ADDR
-#define EVSE_WIFI_1_ADDR EVSE_WIFI_1_LOC
-#endif
 #ifndef EVSE_WIFI_1_SSID
 #define EVSE_WIFI_1_SSID "FiberHGW_ZTN2TY"
 #endif
@@ -120,9 +105,6 @@ static void pulseGpio(uint8_t pin) {
 
 #ifndef EVSE_WIFI_2_LOC
 #define EVSE_WIFI_2_LOC "Rotosis"
-#endif
-#ifndef EVSE_WIFI_2_ADDR
-#define EVSE_WIFI_2_ADDR EVSE_WIFI_2_LOC
 #endif
 #ifndef EVSE_WIFI_2_SSID
 #define EVSE_WIFI_2_SSID "Rotosis_Ofis"
@@ -134,9 +116,6 @@ static void pulseGpio(uint8_t pin) {
 #ifndef EVSE_WIFI_3_LOC
 #define EVSE_WIFI_3_LOC "Ceylan Robot"
 #endif
-#ifndef EVSE_WIFI_3_ADDR
-#define EVSE_WIFI_3_ADDR EVSE_WIFI_3_LOC
-#endif
 #ifndef EVSE_WIFI_3_SSID
 #define EVSE_WIFI_3_SSID "CEYLAN-ROBOT"
 #endif
@@ -146,9 +125,6 @@ static void pulseGpio(uint8_t pin) {
 
 #ifndef EVSE_WIFI_4_LOC
 #define EVSE_WIFI_4_LOC "Rotosis Atolye"
-#endif
-#ifndef EVSE_WIFI_4_ADDR
-#define EVSE_WIFI_4_ADDR EVSE_WIFI_4_LOC
 #endif
 #ifndef EVSE_WIFI_4_SSID
 #define EVSE_WIFI_4_SSID "Rotosis_Atolye"
@@ -160,9 +136,6 @@ static void pulseGpio(uint8_t pin) {
 #ifndef EVSE_WIFI_5_LOC
 #define EVSE_WIFI_5_LOC "Test"
 #endif
-#ifndef EVSE_WIFI_5_ADDR
-#define EVSE_WIFI_5_ADDR EVSE_WIFI_5_LOC
-#endif
 #ifndef EVSE_WIFI_5_SSID
 #define EVSE_WIFI_5_SSID "test"
 #endif
@@ -172,29 +145,40 @@ static void pulseGpio(uint8_t pin) {
 
 static const char* kAdminUser = EVSE_ADMIN_USER;
 static const char* kAdminPassword = EVSE_ADMIN_PASSWORD;
-static const char* kHostName = EVSE_HOSTNAME;
+static const char* kHostNameBase = EVSE_HOSTNAME;
+static const char* kStationName = "Rotosis Robotlu Otomasyon";
+static const char* kStationAddress = "Fevzi Cakmak Mah. Sehit Ibrahim Betin Cd. No:4/F, Arli Sanayi Sitesi, Karatay / Konya";
+static constexpr double kMapLat = 37.94559;
+static constexpr double kMapLng = 32.58082;
+static constexpr uint16_t kMapRadiusM = 520;
+static char s_deviceMac[18] = "";
+static char s_stationCode[7] = "";
+static char s_stationLabel[32] = "Istasyon";
+static char s_hostName[32] = EVSE_HOSTNAME;
 
 struct KnownWifi {
   const char* location;
-  const char* address;
   const char* ssid;
   const char* password;
 };
 
 static const KnownWifi kKnownWifis[] = {
-  {EVSE_WIFI_1_LOC, EVSE_WIFI_1_ADDR, EVSE_WIFI_1_SSID, EVSE_WIFI_1_PASS},
-  {EVSE_WIFI_2_LOC, EVSE_WIFI_2_ADDR, EVSE_WIFI_2_SSID, EVSE_WIFI_2_PASS},
-  {EVSE_WIFI_3_LOC, EVSE_WIFI_3_ADDR, EVSE_WIFI_3_SSID, EVSE_WIFI_3_PASS},
-  {EVSE_WIFI_4_LOC, EVSE_WIFI_4_ADDR, EVSE_WIFI_4_SSID, EVSE_WIFI_4_PASS},
-  {EVSE_WIFI_5_LOC, EVSE_WIFI_5_ADDR, EVSE_WIFI_5_SSID, EVSE_WIFI_5_PASS}
+  {EVSE_WIFI_1_LOC, EVSE_WIFI_1_SSID, EVSE_WIFI_1_PASS},
+  {EVSE_WIFI_2_LOC, EVSE_WIFI_2_SSID, EVSE_WIFI_2_PASS},
+  {EVSE_WIFI_3_LOC, EVSE_WIFI_3_SSID, EVSE_WIFI_3_PASS},
+  {EVSE_WIFI_4_LOC, EVSE_WIFI_4_SSID, EVSE_WIFI_4_PASS},
+  {EVSE_WIFI_5_LOC, EVSE_WIFI_5_SSID, EVSE_WIFI_5_PASS}
 };
 
 WiFiMulti wifiMulti;
 static WebServer server(80);
 static bool wifiEventsReady = false;
-static char s_jsonBuf[6144];
+static uint32_t s_lastHttpRequestMs = 0;
+static uint32_t s_successfulHttpResponses = 0;
+static char s_jsonBuf[4096];
+static bool s_mdnsEnabled = false;
+static TaskHandle_t s_webTaskHandle = nullptr;
 static bool s_serverStarted = false;
-static uint32_t s_lastWebLoopMs = 0;
 static uint32_t s_resetTotalCount = 0;
 static uint32_t s_resetNowCount = 0;
 static uint32_t s_resetHistoryCount = 0;
@@ -202,27 +186,7 @@ static uint32_t s_resetLastSec = 0;
 static uint8_t s_resetLastModeId = 0;
 static Preferences s_resetPrefs;
 static bool s_resetPrefsReady = false;
-static Preferences s_geoPrefs;
-static bool s_geoPrefsReady = false;
-static uint32_t s_geoNextRefreshMs = 0;
-
-struct GeoState {
-  String apiKey;
-  String address;
-  String source;
-  String status;
-  String error;
-  float lat = 0.0f;
-  float lng = 0.0f;
-  float accuracyM = 0.0f;
-  uint32_t updatedAtMs = 0;
-};
-
-static GeoState s_geo;
-
-constexpr uint32_t kGeoBootDelayMs = 15000UL;
-constexpr uint32_t kGeoRefreshMs = 6UL * 60UL * 60UL * 1000UL;
-constexpr uint32_t kGeoRetryMs = 10UL * 60UL * 1000UL;
+static void web_task_runner(void* arg);
 
 struct ManualOtaState {
   bool active = false;
@@ -240,6 +204,38 @@ static bool hasText(const char* value) {
   return value != nullptr && value[0] != '\0';
 }
 
+static void refreshDeviceIdentity() {
+  uint8_t mac[6] = {0};
+  WiFi.macAddress(mac);
+
+  snprintf(
+    s_deviceMac, sizeof(s_deviceMac),
+    "%02X:%02X:%02X:%02X:%02X:%02X",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+  );
+  snprintf(
+    s_stationCode, sizeof(s_stationCode),
+    "%02X%02X%02X",
+    mac[3], mac[4], mac[5]
+  );
+  snprintf(
+    s_stationLabel, sizeof(s_stationLabel),
+    "Istasyon %s",
+    s_stationCode
+  );
+  snprintf(
+    s_hostName, sizeof(s_hostName),
+    "%s-%s",
+    kHostNameBase,
+    s_stationCode
+  );
+}
+
+static const char* currentHostName() {
+  if (!s_hostName[0]) refreshDeviceIdentity();
+  return s_hostName;
+}
+
 static void resetManualOtaState() {
   s_manualOta.active = false;
   s_manualOta.updateBegun = false;
@@ -249,6 +245,7 @@ static void resetManualOtaState() {
 }
 
 static void refreshMdns() {
+  if (!s_mdnsEnabled) return;
   static bool mdnsStarted = false;
   bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
 
@@ -262,16 +259,24 @@ static void refreshMdns() {
   }
 
   if (!mdnsStarted) {
-    if (!MDNS.begin(kHostName)) {
+    if (!MDNS.begin(currentHostName())) {
       Serial.println("[mDNS] Start failed");
       return;
     }
     MDNS.addService("http", "tcp", 80);
     mdnsStarted = true;
     Serial.print("[mDNS] Ready: http://");
-    Serial.print(kHostName);
+    Serial.print(currentHostName());
     Serial.println(".local");
   }
+}
+
+static void ensureServerStarted() {
+  if (s_serverStarted) return;
+  if (WiFi.status() != WL_CONNECTED || WiFi.localIP()[0] == 0) return;
+  Serial.println("[WEB] server.begin() delayed start");
+  server.begin();
+  s_serverStarted = true;
 }
 
 static void setupArduinoOta() {
@@ -299,51 +304,73 @@ static float safeFinite(float v) {
   return v;
 }
 
+struct DisplayCurrentState {
+  bool primed = false;
+  float ia = 0.0f;
+  float ib = 0.0f;
+  float ic = 0.0f;
+};
+
+static DisplayCurrentState s_displayCurrent;
+
+static float smoothDisplayCurrent(float previous, float target) {
+  float delta = target - previous;
+  float alpha = (fabsf(delta) > 2.0f) ? 0.28f : 0.16f;
+  if (target < previous) alpha *= 0.72f;
+  float blended = previous + (delta * alpha);
+  if (blended < 0.08f) blended = 0.0f;
+  return blended;
+}
+
+static void harmonizeThreePhaseDisplay(float* ia, float* ib, float* ic) {
+  if (!ia || !ib || !ic) return;
+  const float activeTh = 0.90f;
+  if (*ia < activeTh || *ib < activeTh || *ic < activeTh) return;
+
+  float maxV = *ia;
+  if (*ib > maxV) maxV = *ib;
+  if (*ic > maxV) maxV = *ic;
+
+  float minV = *ia;
+  if (*ib < minV) minV = *ib;
+  if (*ic < minV) minV = *ic;
+
+  float avg = (*ia + *ib + *ic) / 3.0f;
+  float spread = maxV - minV;
+  if (spread <= 0.45f || (avg > 0.1f && (spread / avg) <= 0.06f)) {
+    *ia = avg;
+    *ib = avg;
+    *ic = avg;
+  }
+}
+
+static void updateDisplayCurrents(float rawIa,
+                                  float rawIb,
+                                  float rawIc,
+                                  float* outIa,
+                                  float* outIb,
+                                  float* outIc) {
+  if (!s_displayCurrent.primed) {
+    s_displayCurrent.ia = rawIa;
+    s_displayCurrent.ib = rawIb;
+    s_displayCurrent.ic = rawIc;
+    s_displayCurrent.primed = true;
+  } else {
+    s_displayCurrent.ia = smoothDisplayCurrent(s_displayCurrent.ia, rawIa);
+    s_displayCurrent.ib = smoothDisplayCurrent(s_displayCurrent.ib, rawIb);
+    s_displayCurrent.ic = smoothDisplayCurrent(s_displayCurrent.ic, rawIc);
+  }
+
+  harmonizeThreePhaseDisplay(&s_displayCurrent.ia, &s_displayCurrent.ib, &s_displayCurrent.ic);
+
+  if (outIa) *outIa = roundf(s_displayCurrent.ia * 10.0f) / 10.0f;
+  if (outIb) *outIb = roundf(s_displayCurrent.ib * 10.0f) / 10.0f;
+  if (outIc) *outIc = roundf(s_displayCurrent.ic * 10.0f) / 10.0f;
+}
+
 static const char* wifiLocationForSsid(const String& connectedSsid) {
   for (size_t i = 0; i < (sizeof(kKnownWifis) / sizeof(kKnownWifis[0])); i++) {
     if (connectedSsid == kKnownWifis[i].ssid) return kKnownWifis[i].location;
-  }
-  return "Bilinmiyor";
-}
-
-static String normalizeLocationLabel(const String& rawLabel) {
-  if (rawLabel.length() == 0) return "Bilinmiyor";
-
-  String out;
-  out.reserve(rawLabel.length() + 8);
-
-  auto appendSpace = [&out]() {
-    if (out.length() == 0 || out[out.length() - 1] == ' ') return;
-    out += ' ';
-  };
-
-  for (size_t i = 0; i < rawLabel.length(); ++i) {
-    char c = rawLabel[i];
-    if (c == '_' || c == '-' || c == '/' || c == '\\') {
-      appendSpace();
-      continue;
-    }
-
-    if (i > 0) {
-      char prev = rawLabel[i - 1];
-      bool splitCamelCase =
-          isupper(static_cast<unsigned char>(c)) &&
-          (islower(static_cast<unsigned char>(prev)) || isdigit(static_cast<unsigned char>(prev)));
-      if (splitCamelCase) appendSpace();
-    }
-
-    out += c;
-  }
-
-  out.trim();
-  return out.length() ? out : String("Bilinmiyor");
-}
-
-static String wifiAddressForSsid(const String& connectedSsid) {
-  for (size_t i = 0; i < (sizeof(kKnownWifis) / sizeof(kKnownWifis[0])); i++) {
-    if (connectedSsid == kKnownWifis[i].ssid) {
-      return normalizeLocationLabel(kKnownWifis[i].address);
-    }
   }
   return "Bilinmiyor";
 }
@@ -354,6 +381,16 @@ static bool requireAdminAuth() {
   }
   server.requestAuthentication(BASIC_AUTH, "RotosisEVSE Admin", "Sifre gerekli");
   return false;
+}
+
+static void noteWebActivity() {
+  // Kullanici aktifken periyodik OTA kontrolu web sunucusunu bloklamasin.
+  s_lastHttpRequestMs = millis();
+  OTA_Manager::deferPeriodicChecks(15000);
+}
+
+static void noteHttpResponseSent() {
+  s_successfulHttpResponses++;
 }
 
 static const char* chargeModeLabel(int mode) {
@@ -417,253 +454,6 @@ static void noteResetEvent(bool clearNow, bool clearHistory) {
   saveResetStats();
 }
 
-static bool geoKeyConfigured() {
-  return s_geo.apiKey.length() >= 8;
-}
-
-static void scheduleGeoRefresh(uint32_t delayMs) {
-  s_geoNextRefreshMs = millis() + delayMs;
-}
-
-static String jsonEscape(const String& raw) {
-  String out;
-  out.reserve(raw.length() + 8);
-  for (size_t i = 0; i < raw.length(); ++i) {
-    char c = raw[i];
-    if (c == '\\' || c == '"') {
-      out += '\\';
-      out += c;
-    } else if (c == '\n' || c == '\r') {
-      out += ' ';
-    } else if ((uint8_t)c >= 0x20) {
-      out += c;
-    }
-  }
-  return out;
-}
-
-static String urlEncode(const String& raw) {
-  static const char kHex[] = "0123456789ABCDEF";
-  String out;
-  out.reserve(raw.length() * 3);
-  for (size_t i = 0; i < raw.length(); ++i) {
-    uint8_t c = static_cast<uint8_t>(raw[i]);
-    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-      out += static_cast<char>(c);
-      continue;
-    }
-    out += '%';
-    out += kHex[(c >> 4) & 0x0F];
-    out += kHex[c & 0x0F];
-  }
-  return out;
-}
-
-static void appendPlacePart(String& out, const String& part) {
-  String clean = part;
-  clean.trim();
-  if (clean.length() == 0) return;
-  if (out.length()) out += ", ";
-  out += clean;
-}
-
-static void clearGeoState(bool keepKey) {
-  if (!keepKey) s_geo.apiKey = "";
-  s_geo.address = "";
-  s_geo.source = "";
-  s_geo.status = geoKeyConfigured() ? "bekleniyor" : "anahtar_yok";
-  s_geo.error = "";
-  s_geo.lat = 0.0f;
-  s_geo.lng = 0.0f;
-  s_geo.accuracyM = 0.0f;
-  s_geo.updatedAtMs = 0;
-}
-
-static void saveGeoState() {
-  if (!s_geoPrefsReady) return;
-  s_geoPrefs.putString("key", s_geo.apiKey);
-  s_geoPrefs.putString("addr", s_geo.address);
-  s_geoPrefs.putString("src", s_geo.source);
-  s_geoPrefs.putString("st", s_geo.status);
-  s_geoPrefs.putString("err", s_geo.error);
-  s_geoPrefs.putFloat("lat", s_geo.lat);
-  s_geoPrefs.putFloat("lng", s_geo.lng);
-  s_geoPrefs.putFloat("acc", s_geo.accuracyM);
-}
-
-static void loadGeoState() {
-  if (!s_geoPrefsReady) return;
-  s_geo.apiKey = s_geoPrefs.getString("key", "");
-  s_geo.address = s_geoPrefs.getString("addr", "");
-  s_geo.source = s_geoPrefs.getString("src", "");
-  s_geo.status = s_geoPrefs.getString("st", "");
-  s_geo.error = s_geoPrefs.getString("err", "");
-  s_geo.lat = s_geoPrefs.getFloat("lat", 0.0f);
-  s_geo.lng = s_geoPrefs.getFloat("lng", 0.0f);
-  s_geo.accuracyM = s_geoPrefs.getFloat("acc", 0.0f);
-  s_geo.updatedAtMs = s_geo.address.length() ? millis() : 0;
-  if (s_geo.status.length() == 0) {
-    s_geo.status = geoKeyConfigured() ? (s_geo.address.length() ? "hazir" : "bekleniyor") : "anahtar_yok";
-  }
-}
-
-static bool fetchIpLocation(float& lat, float& lng, String& approxLabel, String& error) {
-  WiFiClientSecure client;
-  client.setInsecure();
-
-  HTTPClient http;
-  http.setConnectTimeout(5000);
-  http.setTimeout(5000);
-  if (!http.begin(client, "https://ipapi.co/json/")) {
-    error = "IP konum servisi acilamadi";
-    return false;
-  }
-
-  int httpCode = http.GET();
-  if (httpCode != HTTP_CODE_OK) {
-    error = "IP konum HTTP " + String(httpCode);
-    http.end();
-    return false;
-  }
-
-  String payload = http.getString();
-  http.end();
-
-  DynamicJsonDocument doc(2048);
-  DeserializationError jsonErr = deserializeJson(doc, payload);
-  if (jsonErr) {
-    error = "IP konum JSON hatasi";
-    return false;
-  }
-
-  lat = doc["latitude"] | 0.0f;
-  lng = doc["longitude"] | 0.0f;
-  if (fabsf(lat) < 0.001f && fabsf(lng) < 0.001f) {
-    error = "IP konum koordinati bulunamadi";
-    return false;
-  }
-
-  approxLabel = "";
-  appendPlacePart(approxLabel, String((const char*)(doc["city"] | "")));
-  appendPlacePart(approxLabel, String((const char*)(doc["region"] | "")));
-  appendPlacePart(approxLabel, String((const char*)(doc["country_name"] | "")));
-  if (approxLabel.length() == 0) approxLabel = "Yaklasik IP konumu";
-  return true;
-}
-
-static bool reverseGeocodeOpenCage(float lat, float lng, String& address, String& error) {
-  if (!geoKeyConfigured()) {
-    error = "OpenCage anahtari yok";
-    return false;
-  }
-
-  String query = String(lat, 6) + "," + String(lng, 6);
-  String url = "https://api.opencagedata.com/geocode/v1/json?q=" + urlEncode(query) +
-               "&key=" + urlEncode(s_geo.apiKey) +
-               "&language=tr&limit=1&no_annotations=1&address_only=1&abbrv=1&no_record=1";
-
-  WiFiClientSecure client;
-  client.setInsecure();
-
-  HTTPClient http;
-  http.setConnectTimeout(7000);
-  http.setTimeout(7000);
-  if (!http.begin(client, url)) {
-    error = "OpenCage baglantisi kurulamadi";
-    return false;
-  }
-
-  int httpCode = http.GET();
-  if (httpCode != HTTP_CODE_OK) {
-    error = "OpenCage HTTP " + String(httpCode);
-    http.end();
-    return false;
-  }
-
-  String payload = http.getString();
-  http.end();
-
-  DynamicJsonDocument doc(4096);
-  DeserializationError jsonErr = deserializeJson(doc, payload);
-  if (jsonErr) {
-    error = "OpenCage JSON hatasi";
-    return false;
-  }
-
-  JsonArray results = doc["results"].as<JsonArray>();
-  if (results.isNull() || results.size() == 0) {
-    error = "OpenCage adres bulamadi";
-    return false;
-  }
-
-  address = String((const char*)(results[0]["formatted"] | ""));
-  address.trim();
-  if (address.length() == 0) {
-    error = "OpenCage bos adres dondu";
-    return false;
-  }
-  return true;
-}
-
-static bool refreshGeoFromIp(bool manual) {
-  bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
-  if (!geoKeyConfigured()) {
-    if (!manual) {
-      s_geo.status = "anahtar_yok";
-      s_geo.error = "";
-      saveGeoState();
-    }
-    scheduleGeoRefresh(kGeoRetryMs);
-    return false;
-  }
-
-  if (!staOk) {
-    if (s_geo.address.length() == 0) s_geo.status = "wifi_yok";
-    s_geo.error = "Wi-Fi bagli degil";
-    saveGeoState();
-    scheduleGeoRefresh(kGeoRetryMs);
-    return false;
-  }
-
-  float lat = 0.0f;
-  float lng = 0.0f;
-  String approxLabel;
-  String ipError;
-  if (!fetchIpLocation(lat, lng, approxLabel, ipError)) {
-    if (s_geo.address.length() == 0) s_geo.status = "ip_hatasi";
-    s_geo.error = ipError;
-    saveGeoState();
-    scheduleGeoRefresh(kGeoRetryMs);
-    return false;
-  }
-
-  s_geo.lat = lat;
-  s_geo.lng = lng;
-  s_geo.accuracyM = 0.0f;
-
-  String resolvedAddress;
-  String geocodeError;
-  if (reverseGeocodeOpenCage(lat, lng, resolvedAddress, geocodeError)) {
-    s_geo.address = resolvedAddress;
-    s_geo.source = "Yaklasik IP + OpenCage";
-    s_geo.status = "hazir";
-    s_geo.error = "";
-    s_geo.updatedAtMs = millis();
-    saveGeoState();
-    scheduleGeoRefresh(kGeoRefreshMs);
-    return true;
-  }
-
-  if (approxLabel.length()) s_geo.address = approxLabel;
-  s_geo.source = "Yaklasik IP";
-  s_geo.status = s_geo.address.length() ? "yaklasik" : "geocode_hata";
-  s_geo.error = geocodeError;
-  s_geo.updatedAtMs = millis();
-  saveGeoState();
-  scheduleGeoRefresh(s_geo.address.length() ? kGeoRefreshMs : kGeoRetryMs);
-  return s_geo.address.length() > 0;
-}
-
 // 2) Sayfaya gomulu on yuz kaynaklari burada baslar.
 static const char USER_HTML[] PROGMEM = R"HTML(
 
@@ -685,11 +475,64 @@ body.state-A{--accent:#66c7ff;--accentDeep:#249ff0;--accentSoft:rgba(102,199,255
 body.state-B{--accent:#7ae6c4;--accentDeep:#2fc79a;--accentSoft:rgba(122,230,196,.18)}
 body.state-C,body.state-D{--accent:#37d8a2;--accentDeep:#15b987;--accentSoft:rgba(55,216,162,.18)}
 body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgba(255,139,139,.18)}
-.app{position:relative;z-index:1;max-width:430px;margin:0 auto;padding:18px 18px 28px;animation:screenEnter .82s cubic-bezier(.22,1,.36,1);}
+.screenShell{position:relative;z-index:1;max-width:420px;margin:0 auto;padding:14px 12px 22px;}
+.app{position:relative;z-index:1;max-width:396px;min-height:calc(100vh - 44px);margin:0 auto;padding:0 0 18px;animation:screenEnter .82s cubic-bezier(.22,1,.36,1);}
+.app > :not(.mapPanel){position:relative;z-index:2}
+.mapPanel{position:absolute;inset:64px 0 0;z-index:0;margin:0;padding:0;background:transparent;border:none;box-shadow:none;animation:fadeLift .98s .2s both;}
+.mapTop{position:absolute;top:18px;left:14px;right:14px;z-index:380;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:0;}
+.mapStationBadge{display:inline-flex;align-items:center;gap:10px;max-width:250px;padding:8px 14px 8px 8px;border-radius:999px;background:linear-gradient(135deg,rgba(109,205,137,.84),rgba(58,139,85,.76));border:1px solid rgba(240,255,244,.28);box-shadow:0 16px 26px rgba(5,18,12,.16);backdrop-filter:blur(16px);}
+.mapStationGlyph{width:34px;height:34px;border-radius:999px;display:grid;place-items:center;background:linear-gradient(135deg,#f8fff7,#8cf0a8);color:#10331d;box-shadow:0 6px 14px rgba(18,69,36,.18)}
+.mapStationGlyph svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.mapStationInfo{min-width:0}
+.mapEyebrow{display:none}
+.mapTitle{margin:0;font-size:17px;line-height:1.02;letter-spacing:-.03em;color:#f8fffb;white-space:nowrap}
+.mapSub{display:none}
+.mapAction{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 15px;border-radius:999px;border:1px solid rgba(178,212,255,.14);background:linear-gradient(135deg,rgba(14,32,48,.52),rgba(8,21,34,.34));backdrop-filter:blur(12px);color:#eef8ff;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap;box-shadow:0 12px 22px rgba(2,10,18,.18);}
+.mapAction.secondary{background:rgba(10,28,42,.46);color:#bfe8db}
+.mapAction:hover{transform:translateY(-1px);box-shadow:0 16px 28px rgba(2,10,18,.34)}
+.mapMetaRow{display:grid;grid-template-columns:1.45fr .8fr .75fr;gap:8px}
+.mapMeta{padding:10px 11px;border-radius:18px;background:linear-gradient(180deg,rgba(10,28,42,.78),rgba(7,19,31,.58));border:1px solid rgba(87,215,175,.12);box-shadow:var(--shadowSoft)}
+.mapMetaLabel{font-size:11px;font-weight:700;color:#8db8ad}
+.mapMetaValue{margin-top:6px;font-size:15px;font-weight:800;letter-spacing:-.03em;color:#f1fffb}
+.mapMetaValue.mono{font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,"Courier New",monospace}
+.mapCanvas{position:absolute;inset:0;min-height:auto;height:100%;border-radius:34px;overflow:hidden;border:1px solid rgba(103,167,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 18px 36px rgba(2,10,18,.30);background:linear-gradient(180deg,rgba(8,24,37,.28),rgba(4,12,21,.58));}
+.mapCanvas::before{content:"";position:absolute;left:0;right:0;top:0;height:180px;background:linear-gradient(180deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.08) 40%,rgba(255,255,255,0) 100%);pointer-events:none;z-index:330}
+.mapCanvas::after{content:"";position:absolute;left:0;right:0;bottom:0;height:144px;background:linear-gradient(180deg,rgba(8,18,29,0),rgba(8,18,29,.08) 48%,rgba(8,18,29,.18) 100%);pointer-events:none;z-index:320}
+.mapFallback{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:#dffcf3;font-size:15px;font-weight:700;background:linear-gradient(180deg,rgba(8,24,37,.68),rgba(4,12,21,.86));z-index:600}
+.mapFallback.hidden{display:none}
+.mapCanvas .leaflet-control-attribution,.mapCanvas .leaflet-control-zoom{border:none!important;box-shadow:0 12px 24px rgba(2,10,18,.28)!important}
+.mapCanvas .leaflet-control-zoom a{background:rgba(10,29,41,.94)!important;color:#eafcf6!important;border:none!important}
+.mapCanvas .leaflet-control-attribution{background:rgba(8,20,31,.84)!important;color:#a8d0c4!important}
+.mapCanvas .leaflet-control-attribution a{color:#ddfff3!important}
+.leaflet-tile-pane{filter:saturate(1.04) brightness(1.09) contrast(1.08)}
+.mapMarkerShell{background:transparent;border:none}
+.mapMarker{width:28px;height:28px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:900;color:#02110a;background:var(--pin,#37d8a2);border:2px solid rgba(255,255,255,.92);box-shadow:0 10px 18px rgba(2,10,18,.34)}
+.mapMarker.station{width:42px;height:42px;color:#072113;background:radial-gradient(circle at 35% 30%,#ffffff 0%,#dffff0 22%,#45dda0 56%,#149a70 100%);border:3px solid rgba(255,255,255,.96);box-shadow:0 16px 28px rgba(2,10,18,.34),0 0 0 7px rgba(55,216,162,.14)}
+.mapMarkerIcon{display:grid;place-items:center}
+.mapMarkerIcon svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.mapLegend{display:flex;flex-wrap:wrap;gap:6px}
+.mapChip{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;border:1px solid rgba(87,215,175,.14);background:rgba(10,28,42,.52);color:#dffcf3;font-size:11px;font-weight:800;cursor:pointer;transition:all .18s ease}
+.mapChip:hover{transform:translateY(-1px);border-color:rgba(87,215,175,.26)}
+.mapChip.active{background:rgba(55,216,162,.18);border-color:rgba(55,216,162,.3);color:#f1fffb}
+.mapChipDot{width:10px;height:10px;border-radius:999px;background:var(--dot,#37d8a2);box-shadow:0 0 0 4px color-mix(in srgb,var(--dot,#37d8a2) 18%, transparent)}
+.placesHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:2px}
+.placesTitle{font-size:14px;font-weight:800;color:#f1fffb}
+.placesStatus{font-size:11px;color:#8db8ad}
+.placesList{display:grid;grid-template-columns:1fr;gap:10px}
+.placeCard{padding:12px;border-radius:18px;background:linear-gradient(180deg,rgba(10,28,42,.78),rgba(7,19,31,.58));border:1px solid rgba(87,215,175,.12);box-shadow:var(--shadowSoft)}
+.placeTop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.placeName{font-size:14px;font-weight:800;line-height:1.28;color:#f1fffb}
+.placeTag{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.04);font-size:10px;font-weight:800;color:#dffcf3;white-space:nowrap}
+.placeDot{width:9px;height:9px;border-radius:999px;background:var(--dot,#37d8a2)}
+.placeMeta{margin-top:8px;display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#93c8bb}
+.placeActions{margin-top:10px;display:flex;gap:8px}
+.placeBtn{flex:1;display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;border:1px solid rgba(87,215,175,.14);background:rgba(10,28,42,.58);color:#dffcf3;text-decoration:none;font-size:11px;font-weight:800}
+.placeBtn.primary{background:rgba(55,216,162,.16);border-color:rgba(55,216,162,.24)}
+.placeEmpty{padding:18px;border-radius:22px;border:1px dashed rgba(87,215,175,.18);background:rgba(8,20,31,.4);color:#9fcfc2;font-size:14px;line-height:1.5}
 .topbar{display:grid;grid-template-columns:44px 1fr 52px;align-items:center;gap:10px;}
 .backBtn{width:44px;height:44px;border-radius:16px;display:grid;place-items:center;text-decoration:none;color:#dff9f0;font-size:30px;line-height:1;background:linear-gradient(180deg,rgba(18,42,61,.92),rgba(9,22,35,.88));border:1px solid rgba(79,225,178,.16);box-shadow:var(--shadowSoft);}
 .statusWrap{display:flex;justify-content:center;}
-.statusPill{display:inline-flex;align-items:center;gap:10px;padding:11px 16px;border-radius:999px;background:linear-gradient(135deg,rgba(13,31,46,.96),rgba(7,20,31,.9));border:2px solid color-mix(in srgb,var(--accentDeep) 52%, white);box-shadow:0 16px 30px rgba(2,10,18,.28);font-weight:800;font-size:14px;letter-spacing:.01em;color:#eefcf8;animation:fadeLift .82s .04s both;}
+.statusPill{display:inline-flex;align-items:center;gap:10px;padding:11px 16px;border-radius:999px;background:linear-gradient(135deg,rgba(13,31,46,.96),rgba(7,20,31,.9));border:2px solid color-mix(in srgb,var(--accentDeep) 52%, white);box-shadow:0 16px 30px rgba(2,10,18,.28);font-weight:800;font-size:15px;letter-spacing:.01em;color:#eefcf8;animation:fadeLift .82s .04s both;}
 .statusIcon{width:24px;height:24px;display:grid;place-items:center;color:var(--accent);}
 .statusIcon svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 .vehicleName{font-weight:800;}
@@ -698,13 +541,13 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 .sync::before{content:"";width:8px;height:8px;border-radius:999px;background:#3e6f84;box-shadow:0 0 0 4px rgba(62,111,132,.18);}
 .sync.live{color:#dffff4;border-color:rgba(55,216,162,.26);background:linear-gradient(180deg,rgba(18,49,58,.96),rgba(9,26,35,.94));}
 .sync.live::before{background:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 18%, transparent);animation:livePulse 1.8s ease-in-out infinite;}
-.headline{padding:14px 8px 0;text-align:center;animation:fadeLift .88s .1s both;}
-.dateLine{font-size:18px;font-weight:700;letter-spacing:.01em;color:#bde9ff;}
-.locationLine{margin-top:10px;font-size:18px;line-height:1.35;font-weight:700;color:#f1fffb;}
-.hintLine{margin-top:6px;font-size:13px;color:#84c8b5;}
-.carStage{margin-top:20px;padding:16px 12px 10px;border-radius:34px;background:linear-gradient(180deg,rgba(10,28,42,.72),rgba(6,16,26,.34));border:1px solid rgba(87,215,175,.14);box-shadow:var(--shadowSoft);animation:fadeLift .94s .16s both;}
-.carWrap{position:relative;max-width:330px;min-height:198px;margin:0 auto;display:flex;align-items:center;justify-content:center;isolation:isolate;}
-.carWrap::before{content:"";position:absolute;inset:13% 5% 15%;border-radius:34px;background:linear-gradient(180deg,rgba(18,43,62,.72),rgba(7,20,31,.16));border:1px solid rgba(172,244,221,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(10px);z-index:0;}
+.headline{display:none}
+.dateLine{font-size:19px;font-weight:700;letter-spacing:.01em;color:#bde9ff;}
+.locationLine{margin-top:8px;font-size:18px;line-height:1.35;font-weight:700;color:#f1fffb;}
+.hintLine{margin-top:6px;font-size:14px;color:#84c8b5;}
+.carStage{max-width:304px;margin:24px auto 8px;padding:8px 12px 0;border-radius:32px;background:linear-gradient(180deg,rgba(10,28,42,.72),rgba(6,16,26,.34));border:1px solid rgba(143,205,255,.16);box-shadow:0 22px 40px rgba(2,10,18,.28);backdrop-filter:blur(15px);animation:fadeLift .94s .16s both;}
+.carWrap{position:relative;max-width:340px;min-height:166px;margin:0 auto -26px;display:flex;align-items:center;justify-content:center;isolation:isolate;transform:translateY(-28px);}
+.carWrap::before{content:"";position:absolute;inset:13% 5% 15%;border-radius:34px;background:linear-gradient(180deg,rgba(18,43,62,.74),rgba(7,20,31,.28));border:1px solid rgba(172,244,221,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(13px);z-index:0;}
 .carWrap::after{content:"";position:absolute;left:14%;right:14%;bottom:10%;height:58px;border-radius:999px;background:radial-gradient(ellipse at center, rgba(42,221,169,.18) 0%, rgba(42,221,169,.09) 30%, rgba(6,16,26,0) 74%),radial-gradient(ellipse at center, rgba(4,12,20,.5) 0%, rgba(4,12,20,.2) 42%, rgba(4,12,20,0) 76%);filter:blur(8px);z-index:1;animation:platformPulse 6.5s ease-in-out infinite;}
 .carHalo{position:absolute;inset:8% 6% 12%;border-radius:48px;background:radial-gradient(circle at 50% 48%, rgba(210,255,243,.18) 0%, color-mix(in srgb,var(--accent) 48%, white) 22%, rgba(65,177,255,.16) 52%, rgba(255,255,255,0) 82%);filter:blur(14px);opacity:.94;z-index:2;animation:haloBreath 6.2s ease-in-out infinite;}
 .carFill{position:absolute;inset:0;--fillColor:rgba(124,210,112,.86);--alpha:0;--car-img:none;-webkit-mask-image:var(--car-img);mask-image:var(--car-img);-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;overflow:hidden;opacity:var(--alpha);transition:opacity .7s ease;z-index:3;}
@@ -715,49 +558,58 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 .carFill.stateC .carFillInner,.carFill.stateD .carFillInner{animation:carChargeFill 5.8s ease-in-out infinite;}
 .carFill.stateE,.carFill.stateF{--alpha:1;--fillColor:rgba(255,125,125,.92)}
 .carFill.stateE .carFillInner,.carFill.stateF .carFillInner{animation:carFaultPulse 1.1s ease-in-out infinite;}
-.carSvg{position:relative;z-index:4;width:100%;max-width:330px;height:auto;display:block;transform:translateY(-2px);filter:drop-shadow(0 26px 26px rgba(1,9,16,.42));animation:carFloat 7s ease-in-out infinite;}
-.metricCard{margin-top:18px;padding:20px 22px;border-radius:26px;background:linear-gradient(180deg,var(--panelStrong),var(--panel));border:1px solid var(--line);box-shadow:var(--shadow);backdrop-filter:blur(12px);animation:fadeLift 1s .26s both;}
-.metricLabel{font-size:16px;color:#91cbb9;font-weight:700;}
-.metricHero{margin-top:10px;font-size:44px;line-height:1;font-weight:800;letter-spacing:-.04em;color:#f1fffb;}
+.carSvg{position:relative;z-index:4;width:100%;max-width:340px;height:auto;display:block;filter:drop-shadow(0 24px 24px rgba(1,9,16,.42));animation:carFloat 7s ease-in-out infinite;}
+.stationFocus{position:relative;z-index:4;width:max-content;max-width:100%;margin:18px auto 16px;display:grid;justify-items:center;gap:10px;pointer-events:none;animation:fadeLift .96s .22s both;}
+.stationFocusMark{position:relative;width:102px;height:102px;display:grid;place-items:center;}
+.stationFocusHalo{position:absolute;inset:0;border-radius:999px;background:radial-gradient(circle,rgba(118,255,142,.30) 0%,rgba(118,255,142,.18) 34%,rgba(118,255,142,.08) 52%,rgba(118,255,142,0) 76%);}
+.stationFocusPin{position:relative;width:30px;height:30px;border-radius:999px;display:grid;place-items:center;background:linear-gradient(135deg,#f7fff8,#5ce482);border:3px solid rgba(246,255,251,.96);box-shadow:0 14px 24px rgba(2,10,18,.20),0 0 0 10px rgba(118,255,142,.10);}
+.stationFocusPin::after{display:none}
+.stationFocusPin svg{width:14px;height:14px;stroke:#0d4322;fill:none;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}
+.stationFocusCopy{display:grid;justify-items:center;gap:4px}
+.stationFocusHint{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#88f0a6;text-shadow:0 2px 8px rgba(4,14,8,.14)}
+.stationFocusLabel{padding:8px 12px;border-radius:999px;background:linear-gradient(180deg,rgba(13,31,45,.34),rgba(8,21,34,.16));border:1px solid rgba(166,255,194,.12);box-shadow:0 12px 20px rgba(2,10,18,.12);backdrop-filter:blur(14px);font-size:15px;font-weight:900;letter-spacing:-.02em;color:#f3fff7;white-space:nowrap}
+.metricCard{max-width:338px;margin:20px auto 0;padding:20px 22px;border-radius:26px;background:linear-gradient(180deg,rgba(10,28,43,.82),rgba(7,19,31,.62));border:1px solid rgba(151,210,255,.14);box-shadow:0 24px 40px rgba(2,10,18,.28);backdrop-filter:blur(20px);animation:fadeLift 1s .26s both;}
+.metricCard--stats{max-width:338px}
+.metricCardDate{margin:2px 0 14px;padding:11px 14px;border-radius:18px;text-align:center;font-size:16px;font-weight:800;letter-spacing:-.02em;color:#d5f0ff;background:linear-gradient(180deg,rgba(12,32,50,.68),rgba(7,19,31,.48));border:1px solid rgba(151,210,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.metricLabel{font-size:17px;color:#91cbb9;font-weight:700;}
+.metricHero{margin-top:10px;font-size:46px;line-height:1;font-weight:800;letter-spacing:-.04em;color:#f1fffb;}
 .metricHero .unit{font-size:.58em;font-weight:700;letter-spacing:-.01em;color:#7fe5c1;}
-.metricsGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 18px;}
-.metricCell{min-width:0;}
-.metricHead{display:flex;align-items:center;gap:8px;color:#9fcfc2;font-size:16px;font-weight:700;}
+.metricsGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 16px;}
+.metricCell{min-width:0;padding:14px 15px 15px;border-radius:20px;background:linear-gradient(180deg,rgba(12,32,50,.64),rgba(8,22,36,.42));border:1px solid rgba(151,210,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 10px 22px rgba(2,10,18,.12);}
+.metricCell--power{grid-column:1/-1;padding:15px 18px 17px;border-radius:22px;background:linear-gradient(180deg,rgba(14,38,60,.82),rgba(8,22,36,.52));border:1px solid rgba(151,210,255,.13);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 12px 24px rgba(2,10,18,.14);text-align:center;}
+.metricCell--power .metricHead{justify-content:center;font-size:15px;}
+.metricCell--power .metricValue{margin-top:10px;font-size:38px;line-height:1;color:#eefcf8}
+.metricCell--power .metricValue .unit{font-size:.44em;font-weight:700;color:#7fe5c1}
+.metricHead{display:flex;align-items:center;gap:8px;color:#9fcfc2;font-size:15px;font-weight:800;}
 .metricHead svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto;}
-.metricValue{margin-top:9px;font-size:20px;font-weight:800;letter-spacing:-.03em;color:#eafcf6;}
+.metricValue{margin-top:10px;font-size:24px;font-weight:800;letter-spacing:-.03em;color:#f0fcf8;}
 .metricValue .unit{font-size:.82em;color:#6fd8b1;}
-.phaseMeta{margin-top:16px;padding-top:14px;border-top:1px solid rgba(76,210,166,.14);font-size:13px;color:#8bb5a6;display:flex;justify-content:space-between;gap:10px;}
-.footerStatus{margin-top:18px;padding:16px 18px 18px;border-radius:24px;background:linear-gradient(180deg,rgba(12,31,46,.88),rgba(6,17,28,.78));border:1px solid rgba(76,210,166,.14);box-shadow:var(--shadowSoft);animation:fadeLift 1.04s .32s both;}
-.statusRow{display:flex;justify-content:space-between;align-items:center;gap:12px;}
-.statusBadge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#dffcf3;}
-.statusOrb{width:10px;height:10px;border-radius:999px;background:#37d8a2;box-shadow:0 0 0 5px rgba(55,216,162,.14);}
-.statusOrb.warn{background:#b6ef72;box-shadow:0 0 0 5px rgba(182,239,114,.16);}
-.statusOrb.err{background:#ff7d7d;box-shadow:0 0 0 5px rgba(255,125,125,.16);}
-.statusMeta{font-size:12px;color:#8bb5a6;text-align:right;}
-.statusText{margin-top:10px;font-size:18px;font-weight:800;line-height:1.3;color:#eefcf8;}
-.statusFoot{margin-top:12px;display:grid;gap:6px;font-size:12px;color:#8bb5a6;}
-.debugStrip{display:none;}
+.phaseMeta{margin-top:16px;display:flex;justify-content:space-between;gap:10px;font-size:14px;color:#8bb5a6;}
+.phaseMeta span{flex:1;padding:10px 12px;border-radius:16px;background:linear-gradient(180deg,rgba(12,32,50,.58),rgba(8,22,36,.38));border:1px solid rgba(151,210,255,.08);text-align:center}
 .installBtn{display:none;margin-top:14px;width:100%;padding:14px 16px;border-radius:18px;border:1px solid rgba(76,210,166,.16);background:linear-gradient(135deg,rgba(13,40,53,.96),rgba(7,22,31,.9));color:#dcfff2;font-size:14px;font-weight:800;box-shadow:var(--shadowSoft);}
 @keyframes screenEnter{0%{opacity:0;transform:translateY(18px)}100%{opacity:1;transform:translateY(0)}}
 @keyframes fadeLift{0%{opacity:0;transform:translateY(14px)}100%{opacity:1;transform:translateY(0)}}
 @keyframes floatGlowA{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(22px,18px,0) scale(1.08)}}
 @keyframes floatGlowB{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-18px,-14px,0) scale(1.1)}}
 @keyframes haloBreath{0%,100%{opacity:.78;transform:scale(.98)}50%{opacity:1;transform:scale(1.03)}}
-@keyframes carFloat{0%,100%{transform:translateY(-2px)}50%{transform:translateY(-7px)}}
+@keyframes carFloat{0%,100%{transform:translate(-5px,-2px)}50%{transform:translate(-5px,-7px)}}
 @keyframes platformPulse{0%,100%{opacity:.78;transform:scaleX(.96)}50%{opacity:1;transform:scaleX(1.02)}}
 @keyframes livePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.22)}}
 @keyframes carChargeFill{0%{transform:translateY(0)}50%{transform:translateY(-11px)}100%{transform:translateY(0)}}
 @keyframes carFaultPulse{0%,100%{filter:brightness(1) saturate(1)}50%{filter:brightness(1.16) saturate(1.18)}}
-@media(max-width:390px){.app{padding:16px 14px 24px}.statusPill{padding:10px 13px;font-size:13px}.dateLine{font-size:17px}.locationLine{font-size:16px}.metricHero{font-size:38px}.metricValue{font-size:18px}}
+@media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.mapPanel{inset:62px 0 0}.mapTop{top:14px;left:12px;right:12px;align-items:flex-start}.mapStationBadge{max-width:228px}.mapAction{padding:9px 13px}.carStage{max-width:292px;margin-top:18px}.carWrap{max-width:326px;min-height:160px}.carSvg{max-width:326px}.stationFocus{margin:14px auto 14px;gap:8px}.stationFocusMark{width:88px;height:88px}.stationFocusLabel{font-size:14px;padding:8px 11px}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}}
+@media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.mapTop{gap:8px}.mapStationBadge{max-width:196px;padding:7px 12px 7px 7px}.mapStationGlyph{width:30px;height:30px}.mapStationGlyph svg{width:15px;height:15px}.mapTitle{font-size:15px}.mapPanel{inset:58px 0 0}.carStage{max-width:276px;margin-top:14px}.carWrap{max-width:308px;min-height:152px}.carSvg{max-width:308px}.stationFocus{margin:12px auto 12px;gap:7px}.stationFocusMark{width:74px;height:74px}.stationFocusPin{width:26px;height:26px}.stationFocusPin svg{width:12px;height:12px}.stationFocusHint{font-size:10px}.stationFocusLabel{font-size:13px;padding:7px 9px}.metricCard{margin-top:16px;padding:16px 16px}.placeActions{flex-direction:column}}
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a1d2f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="RotosisEVSE">
 </head><body class="state-A">
+<div class="screenShell">
 <div class="app">
   <div class="topbar">
-    <a class="backBtn" href="/admin" aria-label="Ayarlar" title="Ayarlar">&#9881;</a>
+    <a class="backBtn" href="/settings" aria-label="Ayarlar" title="Ayarlar">&#9881;</a>
     <div class="statusWrap">
       <div class="statusPill" id="statusPill">
         <span class="statusIcon" aria-hidden="true">
@@ -769,12 +621,6 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
     <div class="sync" id="sync">WAIT</div>
   </div>
 
-  <div class="headline">
-    <div class="dateLine" id="dateLabel">-</div>
-    <div class="locationLine" id="stationLabel">Konum bekleniyor</div>
-    <div class="hintLine" id="stateHint">Ara&#231; bekleniyor</div>
-  </div>
-
   <section class="carStage">
     <div class="carWrap">
       <div class="carHalo"></div>
@@ -783,13 +629,44 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
     </div>
   </section>
 
-  <section class="metricCard">
-    <div class="metricLabel">Anl&#305;k Aktar&#305;lan G&#252;&#231;</div>
-    <div class="metricHero"><span id="pwr">0.00</span> <span class="unit">kW</span></div>
+  <section class="mapPanel" aria-label="Harita">
+	    <div class="mapCanvas" id="mapCanvas">
+	      <div class="mapTop">
+	        <div class="mapStationBadge">
+		          <div class="mapStationGlyph" id="mapStationGlyph" aria-hidden="true"></div>
+	          <div class="mapStationInfo">
+	            <div class="mapEyebrow">Konum</div>
+	            <h2 class="mapTitle" id="mapStationName">Rotosis Istasyonu</h2>
+	            <div class="mapSub" id="mapStationAddress">Fevzi Cakmak Mah. Sehit Ibrahim Betin Cd. No:4/F, Arli Sanayi Sitesi, Karatay / Konya</div>
+	          </div>
+	        </div>
+	        <a class="mapAction" id="mapOpenBtn" href="#" target="_blank" rel="noopener noreferrer">Haritada ac</a>
+	      </div>
+	      <div class="mapFallback" id="mapFallback">Harita yukleniyor...</div>
+    </div>
   </section>
 
-  <section class="metricCard">
+	  <div class="stationFocus" id="stationFocus" aria-hidden="true">
+	    <div class="stationFocusMark">
+	      <div class="stationFocusHalo"></div>
+	      <div class="stationFocusPin" id="stationFocusDot"></div>
+	    </div>
+	    <div class="stationFocusCopy">
+	      <div class="stationFocusHint">Aktif Sarj Noktasi</div>
+	      <div class="stationFocusLabel" id="stationFocusLabel">Rotosis Istasyonu</div>
+	    </div>
+	  </div>
+
+  <section class="metricCard metricCard--stats">
+    <div class="metricCardDate" id="dateLabel">-</div>
     <div class="metricsGrid">
+      <div class="metricCell metricCell--power">
+        <div class="metricHead">
+          <svg viewBox="0 0 24 24"><path d="M13 2L6 13h4l-1 9 7-11h-4z"></path></svg>
+          <span>Aktar&#305;lan G&#252;&#231;</span>
+        </div>
+        <div class="metricValue"><span id="pwr">0.00</span> <span class="unit">kW</span></div>
+      </div>
       <div class="metricCell">
         <div class="metricHead">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l2.5 2.5"></path></svg>
@@ -825,41 +702,64 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
     </div>
   </section>
 
-  <section class="footerStatus" id="alarmBox">
-    <div class="statusRow">
-      <div class="statusBadge">
-        <span class="statusOrb" id="statusOrb"></span>
-        <span id="statusCode">Durum A</span>
-      </div>
-      <div class="statusMeta" id="alarmMeta">Takip devam ediyor</div>
-    </div>
-    <div class="statusText" id="alarmText">Sistem normal</div>
-    <div class="statusFoot">
-      <div id="wifiLine">Wi-Fi: -</div>
-      <div><span id="host">-</span> | <span id="ip">-</span></div>
-      <div id="ts">-</div>
-    </div>
-    <div class="debugStrip" aria-hidden="true">
-      <span id="state">STATE:A</span>
-      <span id="relay">R:RESET</span>
-      <span id="i1">0.0 A</span>
-      <span id="i2">0.0 A</span>
-      <span id="i3">0.0 A</span>
-      <span id="it">0.0</span>
-      <span id="limitA">32.0</span>
-      <span id="loadPct">0%</span>
-    </div>
-  </section>
-
   <button class="installBtn" id="installBtn">Uygulamaya Ekle</button>
 </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 let deferredPrompt=null;
-const POLL_MS=1200;
+const POLL_MS=2000;
 const MAX_POINTS=40;
 let livePoints=[];
 let chartCeil=32;
 let currentChargeModeId=0;
+const STATION_NAME="Rotosis Robotlu Otomasyon";
+let STATION_DISPLAY="Istasyon";
+const STATION_SHORT="R";
+let STATION_ADDRESS="Fevzi Cakmak Mah. Sehit Ibrahim Betin Cd. No:4/F, Arli Sanayi Sitesi, Karatay / Konya";
+const MAP_FOCUS_ZOOM=16.1;
+const mapUi={
+  coords:document.getElementById("mapCoords"),
+  radius:document.getElementById("radiusText"),
+  count:document.getElementById("nearbyCount"),
+  list:document.getElementById("placesList"),
+  status:document.getElementById("placesStatus"),
+  chipRow:document.getElementById("chipRow"),
+  openBtn:document.getElementById("mapOpenBtn"),
+  routeBtn:document.getElementById("mapRouteBtn"),
+  refreshBtn:document.getElementById("mapRefreshBtn"),
+  fallback:document.getElementById("mapFallback"),
+  stationGlyph:document.getElementById("mapStationGlyph"),
+  stationName:document.getElementById("mapStationName"),
+  stationAddress:document.getElementById("mapStationAddress"),
+  stationFocusLabel:document.getElementById("stationFocusLabel"),
+  focusPin:document.getElementById("stationFocusDot"),
+  focus:document.getElementById("stationFocus"),
+  app:document.querySelector(".app"),
+  carStage:document.querySelector(".carStage"),
+  statsCard:document.querySelector(".metricCard--stats")
+};
+const placeKinds={
+  all:{label:"Tum",short:"T",color:"#7ad8ff"},
+  market:{label:"Market",short:"M",color:"#5fe19d"},
+  cafe:{label:"Kafe",short:"K",color:"#ffbf75"},
+  food:{label:"Yemek",short:"Y",color:"#ff8f8f"},
+  pharmacy:{label:"Eczane",short:"E",color:"#8fb4ff"},
+  fuel:{label:"Akaryakit",short:"A",color:"#ffd766"},
+  parking:{label:"Otopark",short:"P",color:"#c59cff"}
+};
+const mapState={
+  lat:null,
+  lng:null,
+  radius:700,
+  map:null,
+  stationMarker:null,
+  rangeCircle:null,
+  nearbyLayer:null,
+  allPlaces:[],
+  activeFilter:"all",
+  lastFetchKey:""
+};
 const stateMeta={
   A:{name:"Hazır",hint:"Araç bekleniyor"},
   B:{name:"Bağlı",hint:"Araç bağlandı"},
@@ -868,14 +768,26 @@ const stateMeta={
   E:{name:"Şarj Hatası",hint:"Pilot hata durumu"},
   F:{name:"Kritik Hata",hint:"Koruma aktif"}
 };
+const gaugeRing=document.getElementById("gaugeValue");
+const gaugeCirc=gaugeRing?(2*Math.PI*gaugeRing.r.baseVal.value):0;
+if(gaugeRing){
+  gaugeRing.style.strokeDasharray=gaugeCirc.toFixed(1);
+  gaugeRing.style.strokeDashoffset=gaugeCirc.toFixed(1);
+}
 const carEls={
   carSvg:document.getElementById("carSvg"),
   carFill:document.getElementById("carFill"),
-  carFillInner:document.getElementById("carFillInner")
+  carFillInner:document.getElementById("carFillInner"),
+  chargeBar:document.getElementById("chargeBar"),
+  chargeBarInner:document.getElementById("chargeBarInner")
 };
+const BAT_KWH=80;
 const CAR_IMG_SRC=(carEls.carSvg&&carEls.carSvg.getAttribute("src"))?carEls.carSvg.getAttribute("src"):"";
 if(CAR_IMG_SRC&&carEls.carFill){
   carEls.carFill.style.setProperty('--car-img','url('+CAR_IMG_SRC+')');
+}
+function escapeHtml(value){
+  return String(value||"").replace(/[&<>"']/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
 }
 function updateCar(d){
   if(!carEls.carFill||!carEls.carFillInner) return;
@@ -890,15 +802,14 @@ function updateCar(d){
   else if(st==="D") carEls.carFill.classList.add("stateD");
   else if(st==="E") carEls.carFill.classList.add("stateE");
   else if(st==="F") carEls.carFill.classList.add("stateF");
-  const ia=Number(d.ia)||0, ib=Number(d.ib)||0, ic=Number(d.ic)||0;
-  const phaseCount=Math.max(1,Number(d.phase)||1);
-  const limitA=Math.max(6,Number(d.limitA)||32);
-  const totalLimit=phaseCount*limitA;
-  const loadPct=clamp((ia+ib+ic)/totalLimit*100,0,100);
-  let fillPct=0;
-  if(charging) fillPct=Math.max(loadPct,12);
+  const socVal=Number.isFinite(d.soc)?d.soc:(Number.isFinite(d.batt)?d.batt:null);
+  let pctRaw=Number.isFinite(socVal)?socVal:Math.round((Number(d.eKWh)||0)/BAT_KWH*100);
+  pctRaw=Math.max(0,Math.min(100,pctRaw));
+  let fillPct=pctRaw;
+  if(charging) fillPct=Math.max(fillPct,8);
   else if(isCable) fillPct=Math.max(fillPct,12);
   else if(isError) fillPct=Math.max(fillPct,24);
+  if(st==="A") fillPct=0;
   carEls.carFillInner.style.height=Math.max(0,Math.min(100,fillPct))+"%";
 }
 function fmtTime(sec){
@@ -910,6 +821,312 @@ function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
 function setText(id,value){
   const el=document.getElementById(id);
   if(el) el.textContent=value;
+}
+function setMapFallback(text){
+  if(!mapUi.fallback) return;
+  mapUi.fallback.textContent=text;
+  mapUi.fallback.className=text?"mapFallback":"mapFallback hidden";
+}
+function fmtDistance(meters){
+  const m=Math.max(0,Math.round(Number(meters)||0));
+  if(m>=1000) return (m/1000).toFixed(2)+" km";
+  return m+" m";
+}
+function distanceMeters(lat1,lng1,lat2,lng2){
+  const R=6371000;
+  const toRad=(deg)=>deg*Math.PI/180;
+  const dLat=toRad(lat2-lat1);
+  const dLng=toRad(lng2-lng1);
+  const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function placeKindFor(tags){
+  const amenity=String((tags&&tags.amenity)||"").toLowerCase();
+  const shop=String((tags&&tags.shop)||"").toLowerCase();
+  if(amenity==="pharmacy") return "pharmacy";
+  if(amenity==="fuel") return "fuel";
+  if(amenity==="parking") return "parking";
+  if(amenity==="cafe") return "cafe";
+  if(amenity==="restaurant"||amenity==="fast_food"||amenity==="food_court") return "food";
+  if(amenity==="marketplace") return "market";
+  if(shop==="supermarket"||shop==="convenience"||shop==="greengrocer"||shop==="bakery"||shop==="butcher"||shop==="mall"||shop==="kiosk") return "market";
+  if(shop) return "market";
+  return "all";
+}
+function placeKindMeta(kind){
+  return placeKinds[kind]||placeKinds.all;
+}
+function placeImportance(place){
+  const weights={pharmacy:7,fuel:6,market:5,parking:4,cafe:3,food:2,all:1};
+  let score=weights[place.kind]||1;
+  const generic=placeKindMeta(place.kind).label.toLowerCase();
+  if(String(place.name||"").toLowerCase()!==generic) score+=1.4;
+  if(place.distance<=160) score+=1.2;
+  else if(place.distance<=300) score+=.7;
+  return score;
+}
+function stationSymbolSvg(iconClass){
+  return '<svg class="'+iconClass+'" viewBox="0 0 24 24" aria-hidden="true">'+
+    '<path d="M9 5v5"></path>'+
+    '<path d="M15 5v5"></path>'+
+    '<path d="M8 10h8v3a4 4 0 0 1-4 4v3"></path>'+
+    '<path d="M10 20h4"></path>'+
+  '</svg>';
+}
+function buildMarkerIcon(kind,isStation){
+  const meta=isStation?{short:"R",color:"#37d8a2"}:placeKindMeta(kind);
+  const cls=isStation?"mapMarker station":"mapMarker";
+  return L.divIcon({
+    className:"mapMarkerShell",
+    html:isStation
+      ? '<span class="'+cls+'" style="--pin:'+meta.color+'"><span class="mapMarkerIcon">'+stationSymbolSvg("mapMarkerSvg")+"</span></span>"
+      : '<span class="'+cls+'" style="--pin:'+meta.color+'">'+meta.short+"</span>",
+    iconSize:isStation?[48,48]:[28,28],
+    iconAnchor:isStation?[24,24]:[14,14],
+    popupAnchor:[0,-12]
+  });
+}
+function renderFilterChips(){
+  if(!mapUi.chipRow) return;
+  mapUi.chipRow.innerHTML=Object.keys(placeKinds).map((key)=>{
+    const meta=placeKinds[key];
+    const active=mapState.activeFilter===key?" active":"";
+    return '<button class="mapChip'+active+'" type="button" data-kind="'+key+'" style="--dot:'+meta.color+'"><span class="mapChipDot"></span>'+meta.label+"</button>";
+  }).join("");
+}
+function updateMapLinks(){
+  if(!Number.isFinite(mapState.lat)||!Number.isFinite(mapState.lng)) return;
+  const q=mapState.lat.toFixed(5)+","+mapState.lng.toFixed(5);
+  const openHref="https://www.google.com/maps?q="+encodeURIComponent(q);
+  if(mapUi.openBtn) mapUi.openBtn.href=openHref;
+}
+function syncStationCopy(){
+  if(mapUi.stationGlyph) mapUi.stationGlyph.innerHTML=stationSymbolSvg("stationBadgeSvg");
+  if(mapUi.stationName) mapUi.stationName.textContent=STATION_DISPLAY;
+  if(mapUi.stationAddress) mapUi.stationAddress.textContent=STATION_ADDRESS;
+  if(mapUi.stationFocusLabel) mapUi.stationFocusLabel.textContent=STATION_DISPLAY;
+  if(mapUi.focusPin) mapUi.focusPin.innerHTML=stationSymbolSvg("stationFocusSvg");
+}
+function applyStationIdentity(data){
+  if(data&&typeof data.stationName==="string"&&data.stationName.trim()) STATION_DISPLAY=data.stationName.trim();
+  if(data&&typeof data.stationAddr==="string"&&data.stationAddr.trim()) STATION_ADDRESS=data.stationAddr.trim();
+  syncStationCopy();
+}
+function layoutStationFocus(){
+  if(!mapUi.focus) return;
+  mapUi.focus.style.top="";
+}
+function refreshStationFocus(){
+  layoutStationFocus();
+  if(mapState.map&&Number.isFinite(mapState.lat)&&Number.isFinite(mapState.lng)){
+    mapState.map.invalidateSize(false);
+    mapState.map.setView(focusAdjustedCenter(mapState.lat,mapState.lng),MAP_FOCUS_ZOOM,{animate:false});
+    const container=mapState.map.getContainer();
+    const focusTarget=mapUi.focusPin||mapUi.focus;
+    if(container&&focusTarget){
+      const containerRect=container.getBoundingClientRect();
+      const focusRect=focusTarget.getBoundingClientRect();
+      if(containerRect.width&&containerRect.height&&focusRect.width&&focusRect.height){
+        const desired=L.point(
+          containerRect.width/2,
+          (focusRect.top+(focusRect.height/2))-containerRect.top
+        );
+        const actual=mapState.map.latLngToContainerPoint(L.latLng(mapState.lat,mapState.lng));
+        const delta=actual.subtract(desired);
+        if(Math.abs(delta.x)>1||Math.abs(delta.y)>1){
+          mapState.map.panBy(delta,{animate:false});
+        }
+      }
+    }
+  }
+}
+function focusAdjustedCenter(lat,lng){
+  if(!mapState.map||!mapUi.focus) return L.latLng(lat,lng);
+  const container=mapState.map.getContainer();
+  if(!container) return L.latLng(lat,lng);
+  const containerRect=container.getBoundingClientRect();
+  const focusTarget=mapUi.focusPin||mapUi.focus;
+  const focusRect=focusTarget.getBoundingClientRect();
+  if(!containerRect.width||!containerRect.height||!focusRect.width||!focusRect.height) return L.latLng(lat,lng);
+  const desired=L.point(
+    containerRect.width/2,
+    (focusRect.top+(focusRect.height/2))-containerRect.top
+  );
+  const zoom=mapState.map.getZoom();
+  const stationProj=mapState.map.project(L.latLng(lat,lng),zoom);
+  const newCenterProj=stationProj.add(mapState.map.getSize().divideBy(2).subtract(desired));
+  return mapState.map.unproject(newCenterProj,zoom);
+}
+function ensureMap(lat,lng,radius,stationLabel){
+  if(!Number.isFinite(lat)||!Number.isFinite(lng)) {
+    setMapFallback("Koordinat bilgisi bekleniyor");
+    return false;
+  }
+  mapState.lat=lat;
+  mapState.lng=lng;
+  mapState.radius=Math.max(150,Math.round(Number(radius)||700));
+  updateMapLinks();
+  syncStationCopy();
+  if(mapUi.coords) mapUi.coords.textContent=lat.toFixed(5)+", "+lng.toFixed(5);
+  if(mapUi.radius) mapUi.radius.textContent=mapState.radius+" m";
+  if(typeof L==="undefined") {
+    setMapFallback("Harita kutuphanesi yuklenemedi");
+    return false;
+  }
+	  if(!mapState.map){
+	    mapState.map=L.map("mapCanvas",{zoomControl:false,attributionControl:false,scrollWheelZoom:true});
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+      maxZoom:19,
+      attribution:"&copy; OpenStreetMap"
+    }).addTo(mapState.map);
+    L.control.zoom({position:"bottomright"}).addTo(mapState.map);
+    L.control.attribution({prefix:false,position:"bottomleft"}).addAttribution("&copy; OpenStreetMap").addTo(mapState.map);
+    mapState.nearbyLayer=L.layerGroup().addTo(mapState.map);
+	  }
+	  const center=[lat,lng];
+	  mapState.map.setView(center,MAP_FOCUS_ZOOM,{animate:false});
+	  if(mapState.nearbyLayer) mapState.nearbyLayer.clearLayers();
+	  if(mapState.stationMarker) mapState.stationMarker.remove();
+	  mapState.stationMarker=L.marker(center,{icon:buildMarkerIcon("all",true),keyboard:false}).addTo(mapState.map);
+	  mapState.stationMarker.bindPopup("<strong>"+escapeHtml(STATION_DISPLAY)+"</strong><br>"+escapeHtml(STATION_ADDRESS));
+	  if(mapState.stationMarker.setZIndexOffset) mapState.stationMarker.setZIndexOffset(1800);
+	  if(mapState.rangeCircle) mapState.rangeCircle.remove();
+	  mapState.rangeCircle=L.circle(center,{
+	    radius:26,
+	    color:"rgba(104,245,140,.52)",
+	    weight:1.2,
+	    fillColor:"rgba(118,255,142,.18)",
+	    fillOpacity:.2
+	  }).addTo(mapState.map);
+  if(mapState.rangeCircle.bringToBack) mapState.rangeCircle.bringToBack();
+  refreshStationFocus();
+  setTimeout(refreshStationFocus,90);
+  setTimeout(refreshStationFocus,260);
+  setMapFallback("");
+  return true;
+}
+async function fetchOverpassPlaces(){
+  const query='[out:json][timeout:18];('+
+    'node(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[shop];'+
+    'way(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[shop];'+
+    'relation(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[shop];'+
+    'node(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[amenity~"cafe|restaurant|fast_food|food_court|pharmacy|fuel|parking|marketplace"];'+
+    'way(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[amenity~"cafe|restaurant|fast_food|food_court|pharmacy|fuel|parking|marketplace"];'+
+    'relation(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[amenity~"cafe|restaurant|fast_food|food_court|pharmacy|fuel|parking|marketplace"];'+
+  ');out center 80;';
+  const resp=await fetch("https://overpass-api.de/api/interpreter",{
+    method:"POST",
+    headers:{"Content-Type":"text/plain;charset=UTF-8"},
+    body:query
+  });
+  if(!resp.ok) throw new Error("Yakindaki yerler alinamadi");
+  return resp.json();
+}
+function normalizePlaces(payload){
+  const elements=(payload&&payload.elements)||[];
+  const dedupe=new Map();
+  elements.forEach((el)=>{
+    const lat=Number(el.lat ?? (el.center&&el.center.lat));
+    const lng=Number(el.lon ?? (el.center&&el.center.lon));
+    if(!Number.isFinite(lat)||!Number.isFinite(lng)) return;
+    const tags=el.tags||{};
+    const kind=placeKindFor(tags);
+    if(kind==="all") return;
+    const name=(tags.name||tags.brand||tags.operator||placeKindMeta(kind).label).trim();
+    const distance=distanceMeters(mapState.lat,mapState.lng,lat,lng);
+    const key=name+"|"+kind+"|"+lat.toFixed(5)+"|"+lng.toFixed(5);
+    if(dedupe.has(key)) return;
+    dedupe.set(key,{
+      name:name,
+      kind:kind,
+      lat:lat,
+      lng:lng,
+      distance:distance,
+      meta:tags.shop||tags.amenity||"isletme"
+    });
+  });
+  return Array.from(dedupe.values()).sort((a,b)=>a.distance-b.distance).slice(0,24);
+}
+function renderPlaces(){
+  const visible=mapState.allPlaces.filter((place)=>mapState.activeFilter==="all"||place.kind===mapState.activeFilter);
+  const markerPlaces=[...visible].sort((a,b)=>placeImportance(b)-placeImportance(a)||a.distance-b.distance).slice(0,8);
+  if(mapUi.count) mapUi.count.textContent=String(visible.length);
+  if(mapUi.status) mapUi.status.textContent=visible.length?("En yakin "+visible.length+" nokta gosteriliyor"):"Bu filtre icin nokta bulunamadi";
+  if(mapState.nearbyLayer) mapState.nearbyLayer.clearLayers();
+  markerPlaces.forEach((place)=>{
+    const meta=placeKindMeta(place.kind);
+    if(mapState.nearbyLayer){
+      const marker=L.marker([place.lat,place.lng],{icon:buildMarkerIcon(place.kind,false)}).addTo(mapState.nearbyLayer);
+      marker.bindPopup("<strong>"+escapeHtml(place.name)+"</strong><br>"+escapeHtml(meta.label)+" • "+escapeHtml(fmtDistance(place.distance)));
+    }
+  });
+  if(mapState.rangeCircle&&mapState.rangeCircle.bringToBack) mapState.rangeCircle.bringToBack();
+  if(mapState.stationMarker&&mapState.stationMarker.setZIndexOffset) mapState.stationMarker.setZIndexOffset(1600);
+  refreshStationFocus();
+  if(!mapUi.list) return;
+  if(!visible.length){
+    mapUi.list.innerHTML='<div class="placeEmpty">Bu yaricap ve filtre ile uygun bir nokta bulunamadi. Istersen “Yakin yerleri yenile” ile tekrar deneyebilirsin.</div>';
+    return;
+  }
+  mapUi.list.innerHTML=visible.map((place)=>{
+    const meta=placeKindMeta(place.kind);
+    const q=encodeURIComponent(place.lat.toFixed(5)+","+place.lng.toFixed(5));
+    return '<article class="placeCard">'+
+      '<div class="placeTop">'+
+        '<div class="placeName">'+escapeHtml(place.name)+'</div>'+
+        '<div class="placeTag"><span class="placeDot" style="--dot:'+meta.color+'"></span>'+escapeHtml(meta.label)+'</div>'+
+      '</div>'+
+      '<div class="placeMeta"><span>'+escapeHtml(fmtDistance(place.distance))+'</span><span>'+escapeHtml(String(place.meta).replace(/_/g," "))+'</span></div>'+
+      '<div class="placeActions">'+
+        '<a class="placeBtn primary" href="https://www.google.com/maps/dir/?api=1&destination='+q+'" target="_blank" rel="noopener noreferrer">Yol tarifi</a>'+
+        '<a class="placeBtn" href="https://www.google.com/maps?q='+q+'" target="_blank" rel="noopener noreferrer">Ac</a>'+
+      '</div>'+
+    '</article>';
+  }).join("");
+}
+async function loadPlaces(force){
+  if(!Number.isFinite(mapState.lat)||!Number.isFinite(mapState.lng)) return;
+  const key=mapState.lat.toFixed(5)+","+mapState.lng.toFixed(5)+":"+mapState.radius;
+  if(!force&&mapState.lastFetchKey===key&&mapState.allPlaces.length){
+    renderPlaces();
+    return;
+  }
+  if(mapUi.status) mapUi.status.textContent="Yakin yerler taraniyor";
+  if(mapUi.list) mapUi.list.innerHTML='<div class="placeEmpty">Yakindaki isletmeler OpenStreetMap verisinden cekiliyor...</div>';
+  try{
+    const payload=await fetchOverpassPlaces();
+    mapState.allPlaces=normalizePlaces(payload);
+    mapState.lastFetchKey=key;
+    renderPlaces();
+  }catch(err){
+    if(mapUi.status) mapUi.status.textContent="Harita verisi su an alinamadi";
+    if(mapUi.list) mapUi.list.innerHTML='<div class="placeEmpty">Yakin yerler yuklenemedi. Internet erisimi veya Overpass servisi gecici olarak yogun olabilir.</div>';
+  }
+}
+function setupMapUi(){
+  renderFilterChips();
+  if(mapUi.chipRow){
+    mapUi.chipRow.addEventListener("click",(event)=>{
+      const btn=event.target&&event.target.closest?event.target.closest("[data-kind]"):null;
+      if(!btn) return;
+      mapState.activeFilter=btn.getAttribute("data-kind")||"all";
+      renderFilterChips();
+      renderPlaces();
+    });
+  }
+  if(mapUi.refreshBtn){
+    mapUi.refreshBtn.addEventListener("click",()=>loadPlaces(true));
+  }
+}
+window.addEventListener("resize",refreshStationFocus);
+if(window.visualViewport&&window.visualViewport.addEventListener){
+  window.visualViewport.addEventListener("resize",refreshStationFocus);
+}
+if(typeof ResizeObserver!=="undefined"){
+  const focusObserver=new ResizeObserver(()=>refreshStationFocus());
+  [mapUi.app,mapUi.carStage,mapUi.statsCard,mapUi.focus].forEach((el)=>{
+    if(el) focusObserver.observe(el);
+  });
 }
 function chargeCmd(mode){fetch('/charge_cmd?m='+mode).then(()=>pull()).catch(()=>{});}
 function updateChargeAction(modeId){
@@ -926,7 +1143,12 @@ function setSync(ok){
 }
 function setGauge(loadPct){
   const pct=clamp(loadPct,0,100);
+  if(gaugeRing){
+    gaugeRing.style.strokeDashoffset=(gaugeCirc*(1-pct/100)).toFixed(1);
+  }
+  setText("gaugePct",pct.toFixed(0)+"%");
   setText("loadPct",pct.toFixed(0)+"%");
+  setText("loadPctCard",pct.toFixed(0)+"%");
 }
 function pushLivePoint(value){
   livePoints.push(clamp(value,0,999));
@@ -995,12 +1217,9 @@ function pull(){
     const timeSec=(liveSession&&d.sLiveSec!==undefined)?(Number(d.sLiveSec)||0):(Number(d.tSec)||0);
     const activePhases=Math.max(1,[ia,ib,ic].filter(v=>v>0.5).length||phaseCount);
     const displayCurrent=activePhases>1 ? (it/activePhases) : it;
-    const stationBase=(d.geoAddr&&d.geoAddr!=="-"&&d.geoAddr!=="Bilinmiyor")
-      ? d.geoAddr
-      : ((d.wifiAddr&&d.wifiAddr!=="-"&&d.wifiAddr!=="Bilinmiyor")
-      ? d.wifiAddr
-      : ((d.wifiLoc&&d.wifiLoc!=="-"&&d.wifiLoc!=="Bilinmiyor") ? d.wifiLoc : "Konum bekleniyor"));
-    chartCeil=Math.max(6,totalLimit);
+	    const stationBase=(d.wifiLoc&&d.wifiLoc!=="-")?d.wifiLoc:((d.host&&d.host!=="-")?d.host:"EVSE Istasyonu");
+	    applyStationIdentity(d);
+	    chartCeil=Math.max(6,totalLimit);
     setText('it',displayCurrent.toFixed(1));
     setText('currentMetric',displayCurrent.toFixed(1));
     setText('i1',ia.toFixed(1)+" A");
@@ -1009,10 +1228,13 @@ function pull(){
     setText('pwr',powerKw.toFixed(2));
     setText('ekwh',energy.toFixed(1));
     setText('tsec',fmtTime(timeSec));
+    setText('energyMeta',liveSession?"Aktif seans":"Son okuma");
+    setText('timeMeta',phaseCount+" faz");
     setText('limitA',limitA.toFixed(1));
     setText('limitMetric',limitA.toFixed(1));
     setText('limitMeta',phaseCount+" faz / "+limitA.toFixed(1)+" A limit");
     setText('phaseSummary',phaseCount+" faz • "+loadPct.toFixed(0)+"% doluluk");
+    setText('gaugeLabel',phaseCount+" faz / "+limitA.toFixed(1)+" A");
     setText('stationLabel',stationBase);
     updateChargeAction(Number(d.modeId)||0);
     if(d.rLbl!==undefined) setText('relay',"R:"+d.rLbl);
@@ -1021,14 +1243,13 @@ function pull(){
     if(d.host!==undefined) setText('host',d.host);
     setGauge(loadPct);
     setText('ts',"Son güncelleme: "+new Date().toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit",second:"2-digit"}));
-    const wifiText=(d.wifiSsid&&d.wifiSsid!=="-")
-      ? ("Wi-Fi: "+d.wifiSsid+((d.geoAddr&&d.geoAddr!=="-")?" / "+d.geoAddr:((d.wifiAddr&&d.wifiAddr!=="-")?" / "+d.wifiAddr:((d.wifiLoc&&d.wifiLoc!=="-")?" / "+d.wifiLoc:""))))
-      : "Wi-Fi: bağlı değil";
+    const wifiText=(d.wifiSsid&&d.wifiSsid!=="-") ? ("Wi-Fi: "+d.wifiSsid+((d.wifiLoc&&d.wifiLoc!=="-")?" / "+d.wifiLoc:"")) : "Wi-Fi: bağlı değil";
     setText('wifiLine',wifiText);
     renderAlarm(d.alarmLv||0, d.alarmTxt||"Sistem normal", d.state||"A", !!d.staOk);
     updateCar(d);
     pushLivePoint(displayCurrent);
     updateDateLabel();
+	    if(ensureMap(Number(d.mapLat),Number(d.mapLng),Number(d.mapRadius),stationBase)) loadPlaces(false);
     setSync(true);
   }).catch(()=>{ setSync(false); updateDateLabel(); });
 }
@@ -1050,8 +1271,19 @@ if("serviceWorker" in navigator){
     navigator.serviceWorker.register("/sw.js").catch(()=>{});
   });
 }
+setupMapUi();
 renderLiveChart();
 updateDateLabel();
+window.addEventListener("load",()=>{
+  refreshStationFocus();
+  setTimeout(refreshStationFocus,180);
+});
+if(carEls.carSvg&&carEls.carSvg.addEventListener){
+  carEls.carSvg.addEventListener("load",()=>{
+    refreshStationFocus();
+    setTimeout(refreshStationFocus,160);
+  });
+}
 setInterval(pull,POLL_MS);
 setInterval(updateDateLabel,30000);
 pull();
@@ -1060,7 +1292,6 @@ pull();
 
 )HTML";
 
-
 static const char MANIFEST_JSON[] PROGMEM = R"JSON(
 {
   "name": "RotosisEVSE",
@@ -1068,8 +1299,8 @@ static const char MANIFEST_JSON[] PROGMEM = R"JSON(
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#08131c",
-  "theme_color": "#0d1a2b",
+  "background_color": "#07131f",
+  "theme_color": "#0a1d2f",
   "icons": [
     {
       "src": "/app-icon.svg",
@@ -1088,7 +1319,7 @@ static const char MANIFEST_JSON[] PROGMEM = R"JSON(
 )JSON";
 
 static const char SERVICE_WORKER_JS[] PROGMEM = R"JS(
-const CACHE_NAME = "evse-pwa-v4";
+const CACHE_NAME = "evse-pwa-v6";
 const ASSETS = ["/", "/manifest.json", "/app-icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -1120,8 +1351,7 @@ self.addEventListener("fetch", (event) => {
     path === "/calib_apply" ||
     path.startsWith("/relay") ||
     path === "/pulse_reset" ||
-    path === "/pulse_set" ||
-    path === "/geo_config";
+    path === "/pulse_set";
 
   if (isLiveApi) {
     event.respondWith(
@@ -1166,38 +1396,37 @@ static const char APP_ICON_SVG[] PROGMEM = R"SVG(
 static const char MAIN_HTML[] PROGMEM = R"HTML(
 <!DOCTYPE html><html><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RotosisEVSE Panel</title>
+<title>RotosisEVSE Settings</title>
 <style>
-body{font-family:Arial;margin:0;background:#0b1220;color:#e8eefc}
-.wrap{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;padding:12px}
-@media(max-width:900px){.wrap{grid-template-columns:1fr}}
-.card{background:#111a2b;border:1px solid #20304a;border-radius:12px;padding:12px}
+body{font-family:Arial;margin:0;background:#09111d;color:#e8eefc}
+.wrap{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:12px;padding:12px}
+@media(max-width:960px){.wrap{grid-template-columns:1fr}}
+.card{background:#111a2b;border:1px solid #20304a;border-radius:14px;padding:12px}
 h2{margin:0 0 10px 0;font-size:14px;color:#b7c5e6}
-.kv{display:grid;grid-template-columns:140px 1fr;gap:8px;margin:6px 0}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:8px;margin:6px 0}
+@media(max-width:560px){.kv{grid-template-columns:1fr}}
 .k{color:#b7c5e6;font-size:12px}
 .v{font-weight:700}
 .mono{font-family:monospace;color:#00ffaa}
-input{width:100%;padding:8px;border-radius:10px;border:1px solid #20304a;background:#0c1424;color:#e8eefc}
+input{width:100%;padding:8px;border-radius:10px;border:1px solid #20304a;background:#0c1424;color:#e8eefc;box-sizing:border-box}
 .btns{display:flex;flex-wrap:wrap;gap:8px}
 button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#0c1424;color:#e8eefc;cursor:pointer}
 .primary{background:rgba(0,200,150,.18);border-color:rgba(0,200,150,.45)}
 .danger{background:rgba(255,77,77,.14);border-color:rgba(255,77,77,.40)}
-.small{font-size:11px;color:#b7c5e6}
-.sep{height:1px;background:#20304a;margin:10px 0}
-
-.hero{background:linear-gradient(180deg, rgba(0,200,150,.10), rgba(0,0,0,0));border:1px solid #20304a;border-radius:12px;padding:10px;margin-bottom:10px}
+.small{font-size:11px;color:#b7c5e6;line-height:1.5}
+.sep{height:1px;background:#20304a;margin:12px 0}
+.hero{background:linear-gradient(180deg,rgba(0,200,150,.10),rgba(0,0,0,0));border:1px solid #20304a;border-radius:12px;padding:10px;margin-bottom:10px}
 .heroTop{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
 .badge{font-family:monospace;font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid rgba(0,200,150,.45);background:rgba(0,200,150,.12);color:#00ffaa}
 .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 @media(max-width:680px){.grid3,.grid2{grid-template-columns:1fr}}
 .hintBox{padding:10px 12px;border-radius:12px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.18);color:#bde9dd;font-size:12px;line-height:1.55}
-
 </style></head><body>
 
 <div class="wrap">
   <div class="card">
-    <h2>CANLI VERÄ°LER</h2>
+    <h2>CANLI VERILER</h2>
     <div class="kv"><div class="k">State (Stable/Raw)</div><div class="v mono"><span id="sStb">-</span> / <span id="sRaw">-</span></div></div>
     <div class="kv"><div class="k">CP High / Low</div><div class="v mono"><span id="cH">-</span> / <span id="cL">-</span></div></div>
     <div class="kv"><div class="k">ADC High / Low</div><div class="v mono"><span id="aH">-</span> / <span id="aL">-</span></div></div>
@@ -1246,51 +1475,50 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
 
   <div class="card">
     <div class="hero" id="displayPanel">
-  <div class="heroTop">
-    <div style="display:flex;gap:8px;align-items:center">
-      <h2 style="margin:0">RotosisEVSE</h2>
-      <span class="badge" id="badgeState">STATE:-</span>
-    </div>
-    <span class="badge" id="badgeRelay">R: -</span>
-  </div>
-  <div class="kv"><div class="k">I1 / I2 / I3</div><div class="v mono"><span id="i1">-</span> / <span id="i2">-</span> / <span id="i3">-</span> A</div></div>
-  <div class="kv"><div class="k">Power</div><div class="v mono"><span id="pwr">-</span> kW</div></div>
-  <div class="kv"><div class="k">Energy</div><div class="v mono"><span id="ekwh">-</span> kWh</div></div>
-  <div class="kv"><div class="k">Time</div><div class="v mono"><span id="tsec">-</span></div></div>
-  <div class="kv"><div class="k">Phase</div><div class="v mono"><span id="phase">-</span></div></div>
-  <div class="kv"><div class="k">Wi-Fi</div><div class="v mono"><span id="wifiSsid">-</span> (<span id="wifiLoc">-</span>)</div></div>
-  <div class="kv"><div class="k">IP</div><div class="v mono"><span id="ip">-</span></div></div>
-  <div class="kv"><div class="k">Host</div><div class="v mono"><span id="host">-</span></div></div>
-  <div class="kv"><div class="k">Relay</div><div class="v mono"><span id="rLbl">-</span></div></div>
-</div>
+      <div class="heroTop">
+        <div style="display:flex;gap:8px;align-items:center">
+          <h2 style="margin:0">RotosisEVSE</h2>
+          <span class="badge" id="badgeState">STATE:-</span>
+        </div>
+        <span class="badge" id="badgeRelay">R: -</span>
+      </div>
+      <div class="kv"><div class="k">I1 / I2 / I3</div><div class="v mono"><span id="i1">-</span> / <span id="i2">-</span> / <span id="i3">-</span> A</div></div>
+      <div class="kv"><div class="k">Power</div><div class="v mono"><span id="pwr">-</span> kW</div></div>
+      <div class="kv"><div class="k">Energy</div><div class="v mono"><span id="ekwh">-</span> kWh</div></div>
+      <div class="kv"><div class="k">Time</div><div class="v mono"><span id="tsec">-</span></div></div>
+      <div class="kv"><div class="k">Phase</div><div class="v mono"><span id="phase">-</span></div></div>
+      <div class="kv"><div class="k">Wi-Fi</div><div class="v mono"><span id="wifiSsid">-</span> (<span id="wifiLoc">-</span>)</div></div>
+      <div class="kv"><div class="k">IP</div><div class="v mono"><span id="ip">-</span></div></div>
+      <div class="kv"><div class="k">Host</div><div class="v mono"><span id="host">-</span></div></div>
+      <div class="kv"><div class="k">Relay</div><div class="v mono"><span id="rLbl">-</span></div></div>
     </div>
 
     <div class="sep"></div>
 
-    <h2>RÃ¶le</h2>
+    <h2>ROLE</h2>
     <div class="btns">
-      <button class="primary" onclick="send('/relay?on=1')">MANUEL AÃ‡</button>
+      <button class="primary" onclick="send('/relay?on=1')">MANUEL AC</button>
       <button class="danger" onclick="send('/relay?on=0')">MANUEL BIRAK</button>
-      <button onclick="send('/relay_auto?en=1')">AUTO AÃ‡</button>
+      <button onclick="send('/relay_auto?en=1')">AUTO AC</button>
     </div>
-    <div class="small">Not: MANUEL komut AUTOâ€™yu kapatÄ±r.</div>
+    <div class="small">Not: Manuel komut auto akisina aninda mudahale eder.</div>
     <div class="sep"></div>
 
-    <h2>MOSFET Test</h2>
+    <h2>MOSFET TEST</h2>
     <div class="btns">
       <button class="danger" onclick="send('/pulse_reset')">RESET (GPIO 7)</button>
       <button class="primary" onclick="send('/pulse_set')">SET (GPIO 15)</button>
     </div>
-    <div class="small">Not: 100ms HIGH darbe.</div>
+    <div class="small">Not: 100ms HIGH darbe yollar.</div>
     <div class="sep"></div>
 
-    <h2>Sifirlama Gecmisi</h2>
+    <h2>SIFIRLAMA GECMISI</h2>
     <div class="kv"><div class="k">Toplam</div><div class="v mono"><span id="rstTotal">0</span></div></div>
     <div class="kv"><div class="k">Anlik / Gecmis</div><div class="v mono"><span id="rstNow">0</span> / <span id="rstHist">0</span></div></div>
-    <div class="kv"><div class="k">Son Islem</div><div class="v mono"><span id="rstLastMode">YOK</span> @ <span id="rstLastSec">0</span>s</div></div>
+    <div class="kv"><div class="k">Son islem</div><div class="v mono"><span id="rstLastMode">YOK</span> @ <span id="rstLastSec">0</span>s</div></div>
 
     <div class="sep"></div>
-    <h2>OTA Teshis</h2>
+    <h2>OTA TESHIS</h2>
     <div class="kv"><div class="k">FW / Remote</div><div class="v mono"><span id="otaCurVer">-</span> / <span id="otaRemoteVer">-</span></div></div>
     <div class="kv"><div class="k">Calisan bolum</div><div class="v mono"><span id="otaPart">-</span></div></div>
     <div class="kv"><div class="k">Image state</div><div class="v mono"><span id="otaImgState">-</span></div></div>
@@ -1303,42 +1531,17 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
       <button onclick="runBootPrev()">ONCEKI OTA'YA DON</button>
       <button class="danger" onclick="runBootFactory()">FACTORY'E DON</button>
     </div>
-    <div class="small">Not: GitHub kontrolu saatte bir otomatik calisir. `Factory'e don` USB ile yukledigin sabit kurtarma surumunu acar.</div>
-
-    <div class="sep"></div>
-    <h2>Yaklasik Konum</h2>
-    <div class="hintBox">
-      Cihaz kendi dis IP bilgisinden yaklasik koordinat alir, sonra OpenCage ile okunur adrese cevirir.
-      Bu yontem mahalle/ilce seviyesinde yaklasik sonuc verir; kapi numarasini garanti etmez.
-    </div>
-    <div class="kv"><div class="k">Durum</div><div class="v mono"><span id="geoStatus">-</span></div></div>
-    <div class="kv"><div class="k">Adres</div><div class="v mono"><span id="geoAddr">-</span></div></div>
-    <div class="kv"><div class="k">Kaynak</div><div class="v mono"><span id="geoSource">-</span></div></div>
-    <div class="kv"><div class="k">Koordinat</div><div class="v mono"><span id="geoLatLng">-</span></div></div>
-    <div class="kv"><div class="k">Son yenileme</div><div class="v mono"><span id="geoAge">-</span></div></div>
-    <div class="kv"><div class="k">Hata</div><div class="v mono"><span id="geoErr">Hata yok</span></div></div>
-    <div class="kv"><div class="k">OpenCage key</div><div class="v"><input id="geoKey" type="password" placeholder="Cihaza kaydedilecek OpenCage key" onfocus="p()" onblur="r()"></div></div>
-    <div class="small">Anahtar repoya yazilmaz; sadece kartin icindeki ayara kaydedilir.</div>
-    <div class="btns" style="margin-top:10px">
-      <button class="primary" onclick="saveGeoKey()">KEY KAYDET</button>
-      <button onclick="refreshGeo()">KONUMU YENILE</button>
-      <button class="danger" onclick="clearGeoKey()">KEY SIL</button>
-    </div>
-
-
-
+    <div class="small">Not: `Onceki OTA'ya don` aktif olmayan OTA slotunu dener. Onceki surum oradaysa geri donersin. `Factory'e don` ise USB ile yukledigin kurtarma surumunu acar.</div>
   </div>
 </div>
 
-
 <script>
-let paused = false; let t;
-const inps = ["lInt","onD","offD","stb","div","thb","thc","thd","the"];
-const keys = ["lInt","onD","offD","stable","div","thb","thc","thd","the"];
+let paused = false;
+let t;
 
-function p(){ paused=true; clearTimeout(t); }
-function r(){ t=setTimeout(()=>{paused=false;},3000); }
-function send(path){ fetch(path).then(_=>pull(false)); }
+function p(){ paused = true; clearTimeout(t); }
+function r(){ t = setTimeout(() => { paused = false; }, 3000); }
+function send(path){ fetch(path).then(() => pull(false)); }
 function num(v, fallback = 0){
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
@@ -1347,15 +1550,11 @@ function setInput(id, value, force){
   const el = document.getElementById(id);
   if(el && (document.activeElement !== el || force)) el.value = value;
 }
-
 function fmtTime(sec){
-  const m = Math.floor(sec/60);
-  const s = sec%60;
-  const mm = String(m).padStart(2, "0");
-  const ss = String(s).padStart(2, "0");
-  return mm + ":" + ss;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
 }
-
 function fmtOtaAge(ms){
   const sec = Math.max(0, Math.round((Number(ms) || 0) / 1000));
   if(sec === 0) return "hemen simdi";
@@ -1364,13 +1563,11 @@ function fmtOtaAge(ms){
   const rem = sec % 60;
   return min + " dk " + rem + " sn once";
 }
-
 function runOtaCheckAdmin(){
   fetch('/ota_check', {cache:'no-store'}).then(() => {
     document.getElementById('otaStatus').textContent = 'check_requested';
   });
 }
-
 function runBootFactory(){
   if(!confirm('Factory surume donup cihaz yeniden baslatilsin mi?')) return;
   fetch('/boot_factory', {cache:'no-store'})
@@ -1381,7 +1578,6 @@ function runBootFactory(){
     })
     .catch(e => alert(e.message || 'Factory gecisi basarisiz'));
 }
-
 function runBootPrev(){
   if(!confirm('Aktif olmayan OTA slotu secilip cihaz yeniden baslatilsin mi?')) return;
   fetch('/boot_prev', {cache:'no-store'})
@@ -1392,61 +1588,6 @@ function runBootPrev(){
     })
     .catch(e => alert(e.message || 'Onceki OTA gecisi basarisiz'));
 }
-
-function geoFormBody(parts){
-  return Object.entries(parts)
-    .map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
-    .join('&');
-}
-
-function saveGeoKey(){
-  const input = document.getElementById('geoKey');
-  const key = (input && input.value ? input.value : '').trim();
-  if(!key){
-    alert('OpenCage key gir.');
-    return;
-  }
-  fetch('/geo_config', {
-    method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body:geoFormBody({key:key, refresh:1})
-  })
-    .then(r => r.json())
-    .then(() => {
-      if(input) input.value = '';
-      pull(true);
-      alert('OpenCage key kaydedildi, konum yenileniyor.');
-    })
-    .catch(() => alert('OpenCage key kaydedilemedi.'));
-}
-
-function refreshGeo(){
-  fetch('/geo_config', {
-    method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body:geoFormBody({refresh:1})
-  })
-    .then(r => r.json())
-    .then(() => pull(true))
-    .catch(() => alert('Konum yenileme basarisiz.'));
-}
-
-function clearGeoKey(){
-  if(!confirm('OpenCage key silinsin ve geocode onbellegi temizlensin mi?')) return;
-  fetch('/geo_config', {
-    method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body:geoFormBody({clear:1})
-  })
-    .then(r => r.json())
-    .then(() => {
-      const input = document.getElementById('geoKey');
-      if(input) input.value = '';
-      pull(true);
-    })
-    .catch(() => alert('OpenCage key silinemedi.'));
-}
-
 function fillClampLow(){
   let changed = 0;
   ['A','B','C'].forEach(ph => {
@@ -1464,7 +1605,6 @@ function fillClampLow(){
   }
   alert('Ical A/B/C alanlari pens faz degerlerine gore dolduruldu.');
 }
-
 function fillClampMid(){
   let changed = 0;
   ['A','B','C'].forEach(ph => {
@@ -1481,33 +1621,32 @@ function fillClampMid(){
   }
   alert('Offset A/B/C alanlari pens faz degerlerine gore dolduruldu.');
 }
-
 function pull(force=false){
   if(paused && !force) return;
-  fetch('/status', {cache:'no-store'}).then(r=>r.json()).then(d=>{
+  fetch('/status', {cache:'no-store'}).then(r => r.json()).then(d => {
     document.getElementById('sStb').textContent = d.state;
     document.getElementById('sRaw').textContent = d.stateRaw;
-    document.getElementById('cH').textContent = d.cpHigh.toFixed(2)+"V";
-    document.getElementById('cL').textContent = d.cpLow.toFixed(2)+"V";
-    document.getElementById('aH').textContent = d.adcHigh.toFixed(3)+"V";
-    document.getElementById('aL').textContent = d.adcLow.toFixed(3)+"V";
-    if(d.ia !== undefined) document.getElementById('i1').textContent = d.ia.toFixed(2);
-    if(d.ib !== undefined) document.getElementById('i2').textContent = d.ib.toFixed(2);
-    if(d.ic !== undefined) document.getElementById('i3').textContent = d.ic.toFixed(2);
-    if(d.pW !== undefined) document.getElementById('pwr').textContent = (d.pW/1000.0).toFixed(2);
-    if(d.eKWh !== undefined) document.getElementById('ekwh').textContent = d.eKWh.toFixed(3);
-    if(d.tSec !== undefined) document.getElementById('tsec').textContent = fmtTime(d.tSec);
-    if(d.phase !== undefined) document.getElementById('phase').textContent = d.phase + "F";
-    if(d.wifiSsid !== undefined) document.getElementById('wifiSsid').textContent = d.wifiSsid;
-    if(d.wifiLoc !== undefined) document.getElementById('wifiLoc').textContent = d.wifiLoc;
-    if(d.ip !== undefined) document.getElementById('ip').textContent = d.ip;
-    if(d.host !== undefined) document.getElementById('host').textContent = d.host;
-    if(d.rLbl !== undefined) document.getElementById('rLbl').textContent = d.rLbl;
-    if(d.rstTotal !== undefined) document.getElementById('rstTotal').textContent = d.rstTotal;
-    if(d.rstNow !== undefined) document.getElementById('rstNow').textContent = d.rstNow;
-    if(d.rstHist !== undefined) document.getElementById('rstHist').textContent = d.rstHist;
-    if(d.rstLastMode !== undefined) document.getElementById('rstLastMode').textContent = d.rstLastMode;
-    if(d.rstLastSec !== undefined) document.getElementById('rstLastSec').textContent = d.rstLastSec;
+    document.getElementById('cH').textContent = num(d.cpHigh).toFixed(2) + 'V';
+    document.getElementById('cL').textContent = num(d.cpLow).toFixed(2) + 'V';
+    document.getElementById('aH').textContent = num(d.adcHigh).toFixed(3) + 'V';
+    document.getElementById('aL').textContent = num(d.adcLow).toFixed(3) + 'V';
+    document.getElementById('i1').textContent = num(d.ia).toFixed(2);
+    document.getElementById('i2').textContent = num(d.ib).toFixed(2);
+    document.getElementById('i3').textContent = num(d.ic).toFixed(2);
+    document.getElementById('pwr').textContent = (num(d.pW) / 1000.0).toFixed(2);
+    document.getElementById('ekwh').textContent = num(d.eKWh).toFixed(3);
+    document.getElementById('tsec').textContent = fmtTime(num(d.tSec, 0));
+    document.getElementById('phase').textContent = num(d.phase, 1) + 'F';
+    document.getElementById('wifiSsid').textContent = d.wifiSsid || '-';
+    document.getElementById('wifiLoc').textContent = d.wifiLoc || '-';
+    document.getElementById('ip').textContent = d.ip || '-';
+    document.getElementById('host').textContent = d.host || '-';
+    document.getElementById('rLbl').textContent = d.rLbl || '-';
+    document.getElementById('rstTotal').textContent = d.rstTotal || 0;
+    document.getElementById('rstNow').textContent = d.rstNow || 0;
+    document.getElementById('rstHist').textContent = d.rstHist || 0;
+    document.getElementById('rstLastMode').textContent = d.rstLastMode || 'YOK';
+    document.getElementById('rstLastSec').textContent = d.rstLastSec || 0;
     document.getElementById('otaCurVer').textContent = d.otaCur || '-';
     document.getElementById('otaRemoteVer').textContent = d.otaRemote || '-';
     document.getElementById('otaPart').textContent = d.otaPart || '-';
@@ -1515,45 +1654,25 @@ function pull(force=false){
     document.getElementById('otaStatus').textContent = d.otaStatus || '-';
     document.getElementById('otaAge').textContent = fmtOtaAge(d.otaAgeMs);
     document.getElementById('otaError').textContent = (d.otaErr && d.otaErr.length) ? d.otaErr : 'Hata yok';
-    const liveA = num(d.ia);
-    const liveB = num(d.ib);
-    const liveC = num(d.ic);
-    document.getElementById('liveIa').textContent = liveA.toFixed(2);
-    document.getElementById('liveIb').textContent = liveB.toFixed(2);
-    document.getElementById('liveIc').textContent = liveC.toFixed(2);
-    const liveVals = [liveA, liveB, liveC].filter(v => v > 0.1);
-    const liveAvg = liveVals.length ? (liveVals.reduce((sum, v) => sum + v, 0) / liveVals.length) : 0;
-    document.getElementById('liveIAvg').textContent = liveAvg.toFixed(2);
-    document.getElementById('geoStatus').textContent = d.geoStatus || '-';
-    document.getElementById('geoAddr').textContent = d.geoAddr || '-';
-    document.getElementById('geoSource').textContent = d.geoSource || '-';
-    document.getElementById('geoErr').textContent = (d.geoErr && d.geoErr.length) ? d.geoErr : 'Hata yok';
-    document.getElementById('geoAge').textContent = fmtOtaAge(d.geoAgeMs);
-    const geoLat = Number(d.geoLat) || 0;
-    const geoLng = Number(d.geoLng) || 0;
-    document.getElementById('geoLatLng').textContent = (geoLat || geoLng) ? (geoLat.toFixed(5) + ', ' + geoLng.toFixed(5)) : '-';
-    const geoKeyInput = document.getElementById('geoKey');
-    if(geoKeyInput) geoKeyInput.placeholder = d.geoKeySet ? 'OpenCage key kayitli' : 'Cihaza kaydedilecek OpenCage key';
-
-    // Ust rozetler
-    const st = (d.state || "-");
-    document.getElementById('badgeState').textContent = "STATE:" + st;
-
+    document.getElementById('badgeState').textContent = 'STATE:' + (d.state || '-');
     const relayBadge = document.getElementById('badgeRelay');
-    const rtxt = d.rLbl ? d.rLbl : "-";
-    relayBadge.textContent = "R: " + rtxt;
+    relayBadge.textContent = 'R: ' + (d.rLbl || '-');
+    relayBadge.style.backgroundColor = (d.state === 'C') ? 'rgba(0,255,170,0.3)' : '';
 
-    // Sarjdayken kablo parlasin
-    if(d.state === "C") {
-      relayBadge.style.backgroundColor = "rgba(0,255,170,0.3)";
-    } else {
-      relayBadge.style.backgroundColor = "";
-    }
+    document.getElementById('liveIa').textContent = num(d.ia).toFixed(2);
+    document.getElementById('liveIb').textContent = num(d.ib).toFixed(2);
+    document.getElementById('liveIc').textContent = num(d.ic).toFixed(2);
+    document.getElementById('liveIAvg').textContent = num(d.iAvg).toFixed(2);
 
-    inps.forEach((id, i) => {
-      let el = document.getElementById(id);
-      if(el && (document.activeElement !== el || force)) el.value = d[keys[i]];
-    });
+    setInput('lInt', d.lInt, force);
+    setInput('onD', d.onD, force);
+    setInput('offD', d.offD, force);
+    setInput('stb', d.stable, force);
+    setInput('div', d.div, force);
+    setInput('thb', d.thb, force);
+    setInput('thc', d.thc, force);
+    setInput('thd', d.thd, force);
+    setInput('the', d.the, force);
     setInput('icalA', d.icalA, force);
     setInput('icalB', d.icalB, force);
     setInput('icalC', d.icalC, force);
@@ -1566,10 +1685,17 @@ function pull(force=false){
     setInput('rngMidOff', d.rngMidOff, force);
   });
 }
-
 function applyCal(){
   const q = new URLSearchParams();
-  inps.forEach((id, i) => q.append(keys[i]==="stable"?"s":keys[i], document.getElementById(id).value));
+  q.append('lInt', document.getElementById('lInt').value);
+  q.append('onD', document.getElementById('onD').value);
+  q.append('offD', document.getElementById('offD').value);
+  q.append('s', document.getElementById('stb').value);
+  q.append('div', document.getElementById('div').value);
+  q.append('thb', document.getElementById('thb').value);
+  q.append('thc', document.getElementById('thc').value);
+  q.append('thd', document.getElementById('thd').value);
+  q.append('the', document.getElementById('the').value);
   q.append('icalA', document.getElementById('icalA').value);
   q.append('icalB', document.getElementById('icalB').value);
   q.append('icalC', document.getElementById('icalC').value);
@@ -1581,10 +1707,13 @@ function applyCal(){
   q.append('rngLowOff', document.getElementById('rngLowOff').value);
   q.append('rngMidOff', document.getElementById('rngMidOff').value);
   if(document.activeElement) document.activeElement.blur();
-  fetch('/calib_apply?'+q.toString()).then(_=>{alert("Tamam"); paused=false; pull(true);});
+  fetch('/calib_apply?' + q.toString()).then(() => {
+    alert('Tamam');
+    paused = false;
+    pull(true);
+  });
 }
-
-setInterval(()=>pull(false), 2000);
+setInterval(() => pull(false), 3000);
 pull(true);
 </script>
 
@@ -1598,12 +1727,13 @@ static void setupWiFi() {
   WiFi.setSleep(false);
   WiFi.disconnect(true, true);
   delay(100);
-  WiFi.setHostname(kHostName);
   WiFi.mode(WIFI_STA);
+  refreshDeviceIdentity();
+  WiFi.setHostname(currentHostName());
   WiFi.softAPdisconnect(true);
   Serial.println("[WiFi] AP kapali, sadece STA modu aktif.");
   Serial.print("[WiFi] Hostname: ");
-  Serial.println(kHostName);
+  Serial.println(currentHostName());
 
   if (!wifiEventsReady) {
     wifiEventsReady = true;
@@ -1635,7 +1765,7 @@ static void setupWiFi() {
     Serial.println(" - STA listesi bos.");
   }
 
-  if (addedWifiCount > 0 && wifiMulti.run() == WL_CONNECTED) {
+  if (addedWifiCount > 0 && wifiMulti.run(1500) == WL_CONNECTED) {
     Serial.println("");
     Serial.println("WiFi Baglandi!");
     Serial.print("Konum: ");
@@ -1645,83 +1775,35 @@ static void setupWiFi() {
   }
 
   Serial.println("[WiFi] Kendi AP yayini kapali.");
-  refreshMdns();
+  if (s_mdnsEnabled) {
+    refreshMdns();
+  } else {
+    Serial.println("[mDNS] Test icin gecici olarak devre disi");
+  }
 }
 
 // 3) HTTP handler'lari.
 // Her endpoint kendi verisini veya komutunu burada uretir.
-static void handleRoot() { server.send_P(200, "text/html", USER_HTML); }
+static void handleRoot() {
+  noteWebActivity();
+  noteHttpResponseSent();
+  server.send_P(200, "text/html", USER_HTML);
+}
 static void handleAdmin() {
+  noteWebActivity();
   if (!requireAdminAuth()) return;
+  noteHttpResponseSent();
   server.send_P(200, "text/html", MAIN_HTML);
 }
-static void handlePing() { server.send(200, "text/plain", "OK"); }
-static void handleManifest() { server.send_P(200, "application/manifest+json", MANIFEST_JSON); }
-static void handleServiceWorker() { server.send_P(200, "application/javascript", SERVICE_WORKER_JS); }
-static void handleAppIcon() { server.send_P(200, "image/svg+xml", APP_ICON_SVG); }
+static void handlePing() { noteWebActivity(); noteHttpResponseSent(); server.send(200, "text/plain", "OK"); }
+static void handleManifest() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "application/manifest+json", MANIFEST_JSON); }
+static void handleServiceWorker() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "application/javascript", SERVICE_WORKER_JS); }
+static void handleAppIcon() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "image/svg+xml", APP_ICON_SVG); }
 static void handleOtaCheck() {
+  noteWebActivity();
   OTA_Manager::triggerCheckNow();
+  noteHttpResponseSent();
   server.send(200, "application/json", "{\"ok\":1}");
-}
-
-static void sendGeoConfigResponse(bool ok) {
-  String body;
-  body.reserve(512);
-  body += "{\"ok\":";
-  body += ok ? '1' : '0';
-  body += ",\"geoKeySet\":";
-  body += geoKeyConfigured() ? '1' : '0';
-  body += ",\"geoStatus\":\"";
-  body += jsonEscape(s_geo.status.length() ? s_geo.status : (geoKeyConfigured() ? "bekleniyor" : "anahtar_yok"));
-  body += "\",\"geoAddr\":\"";
-  body += jsonEscape(s_geo.address.length() ? s_geo.address : "-");
-  body += "\",\"geoSource\":\"";
-  body += jsonEscape(s_geo.source.length() ? s_geo.source : "-");
-  body += "\",\"geoErr\":\"";
-  body += jsonEscape(s_geo.error);
-  body += "\",\"geoLat\":";
-  body += String(s_geo.lat, 6);
-  body += ",\"geoLng\":";
-  body += String(s_geo.lng, 6);
-  body += "}";
-  server.send(ok ? 200 : 500, "application/json", body);
-}
-
-static void handleGeoConfig() {
-  if (!requireAdminAuth()) return;
-
-  bool ok = true;
-  bool shouldRefresh = false;
-
-  if (server.hasArg("clear") && server.arg("clear") == "1") {
-    clearGeoState(false);
-    saveGeoState();
-    scheduleGeoRefresh(kGeoRetryMs);
-    sendGeoConfigResponse(true);
-    return;
-  }
-
-  if (server.hasArg("key")) {
-    String key = server.arg("key");
-    key.trim();
-    s_geo.apiKey = key;
-    if (s_geo.status.length() == 0 || s_geo.status == "anahtar_yok") {
-      s_geo.status = geoKeyConfigured() ? "bekleniyor" : "anahtar_yok";
-    }
-    s_geo.error = "";
-    saveGeoState();
-    shouldRefresh = geoKeyConfigured();
-  }
-
-  if (server.hasArg("refresh") && server.arg("refresh") == "1") {
-    shouldRefresh = true;
-  }
-
-  if (shouldRefresh) {
-    ok = refreshGeoFromIp(true);
-  }
-
-  sendGeoConfigResponse(ok);
 }
 
 static void scheduleDeferredRestart() {
@@ -1730,22 +1812,28 @@ static void scheduleDeferredRestart() {
 }
 
 static void handleBootFactory() {
+  noteWebActivity();
   if (!requireAdminAuth()) return;
   if (!OTA_Manager::selectFactoryBootPartition()) {
+    noteHttpResponseSent();
     server.send(500, "text/plain", OTA_Manager::lastErrorText());
     return;
   }
   scheduleDeferredRestart();
+  noteHttpResponseSent();
   server.send(200, "text/plain", "Factory secildi, cihaz yeniden baslatiliyor");
 }
 
 static void handleBootPrev() {
+  noteWebActivity();
   if (!requireAdminAuth()) return;
   if (!OTA_Manager::selectAlternateOtaBootPartition()) {
+    noteHttpResponseSent();
     server.send(409, "text/plain", OTA_Manager::lastErrorText());
     return;
   }
   scheduleDeferredRestart();
+  noteHttpResponseSent();
   server.send(200, "text/plain", "Diger OTA slotu secildi, cihaz yeniden baslatiliyor");
 }
 
@@ -1760,6 +1848,7 @@ static void failManualOta(const String& reason) {
 }
 
 static void handleManualUpdatePage() {
+  noteWebActivity();
   if (!requireAdminAuth()) return;
 
   String html;
@@ -1788,10 +1877,13 @@ static void handleManualUpdatePage() {
             "<button type='submit'>BIN YUKLE</button>"
             "</form><p class='muted'><a href='/admin'>Admin panele don</a></p>"
             "</div></body></html>");
+
+  noteHttpResponseSent();
   server.send(200, "text/html", html);
 }
 
 static void handleManualUpdateUpload() {
+  noteWebActivity();
   if (!server.authenticate(kAdminUser, kAdminPassword)) {
     return;
   }
@@ -1858,6 +1950,7 @@ static void handleManualUpdateUpload() {
 }
 
 static void handleManualUpdateResult() {
+  noteWebActivity();
   if (!server.authenticate(kAdminUser, kAdminPassword)) {
     server.requestAuthentication(BASIC_AUTH, "RotosisEVSE Admin", "Sifre gerekli");
     return;
@@ -1891,25 +1984,31 @@ static void handleManualUpdateResult() {
   }
 
   s_manualOta.active = false;
+  noteHttpResponseSent();
   server.send(code, contentType, body);
 }
 
 // Status endpoint'i kullanici panelinin ana veri kaynagidir.
 static void handleStatus() {
+  noteWebActivity();
   auto m = pilot_get();
   uint32_t nowMs = millis();
 
-  float ia = safeFinite(current_sensor_get_irms_a());
-  float ib = safeFinite(current_sensor_get_irms_b());
-  float ic = safeFinite(current_sensor_get_irms_c());
+  float rawIa = safeFinite(current_sensor_get_irms_a());
+  float rawIb = safeFinite(current_sensor_get_irms_b());
+  float rawIc = safeFinite(current_sensor_get_irms_c());
   bool relaySet = relay_get();
   bool chargingState = (m.stateStable == "C" || m.stateStable == "D");
   bool accountingEnabled = relaySet && pwmEnabled && chargingState;
   if (!accountingEnabled) {
-    ia = 0.0f;
-    ib = 0.0f;
-    ic = 0.0f;
+    rawIa = 0.0f;
+    rawIb = 0.0f;
+    rawIc = 0.0f;
   }
+  float ia = 0.0f;
+  float ib = 0.0f;
+  float ic = 0.0f;
+  updateDisplayCurrents(rawIa, rawIb, rawIc, &ia, &ib, &ic);
   float pW = accountingEnabled ? safeFinite(g_powerW) : 0.0f;
   float eKWh = safeFinite(g_energyKWh);
   float cpHigh = safeFinite(m.cpHigh);
@@ -1917,25 +2016,38 @@ static void handleStatus() {
   float adcHigh = safeFinite(m.adcHigh);
   float adcLow = safeFinite(m.adcLow);
   const char* relayLabel = relaySet ? "SET" : "RESET";
+  float iMax = rawIa;
+  if (rawIb > iMax) iMax = rawIb;
+  if (rawIc > iMax) iMax = rawIc;
+  float iAvgSum = 0.0f;
+  int iAvgCount = 0;
+  if (ia > 0.1f) {
+    iAvgSum += ia;
+    iAvgCount++;
+  }
+  if (ib > 0.1f) {
+    iAvgSum += ib;
+    iAvgCount++;
+  }
+  if (ic > 0.1f) {
+    iAvgSum += ic;
+    iAvgCount++;
+  }
+  float iAvg = (iAvgCount > 0) ? (iAvgSum / (float)iAvgCount) : 0.0f;
   float calA = 0.0f, calB = 0.0f, calC = 0.0f;
   float offA = 0.0f, offB = 0.0f, offC = 0.0f;
   float rngLowMax = 0.0f, rngMidMax = 0.0f, rngLowOff = 0.0f, rngMidOff = 0.0f;
   current_sensor_get_calibration(&calA, &calB, &calC, &offA, &offB, &offC);
   current_sensor_get_range_profile(&rngLowMax, &rngMidMax, &rngLowOff, &rngMidOff);
-  float iMax = ia;
-  if (ib > iMax) iMax = ib;
-  if (ic > iMax) iMax = ic;
 
   String wifiSsid = "-";
   String wifiLoc = "-";
-  String wifiAddr = "-";
-  String geoAddr = s_geo.address.length() ? s_geo.address : "-";
-  String geoSource = s_geo.source.length() ? s_geo.source : "-";
-  String geoStatus = s_geo.status.length() ? s_geo.status : (geoKeyConfigured() ? "bekleniyor" : "anahtar_yok");
-  String geoErr = s_geo.error;
-  uint32_t geoAgeMs = s_geo.updatedAtMs ? (nowMs - s_geo.updatedAtMs) : 0;
   String ipStr = "-";
-  String hostStr = String(kHostName) + ".local";
+  refreshDeviceIdentity();
+  String hostStr = String(currentHostName()) + ".local";
+  String macStr = s_deviceMac;
+  String stationCodeStr = s_stationCode;
+  String stationNameStr = s_stationLabel;
   bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
   const char* otaCurrent = OTA_Manager::currentVersion();
   const char* otaRemote = OTA_Manager::lastRemoteVersion();
@@ -1944,25 +2056,11 @@ static void handleStatus() {
   const char* otaStatus = OTA_Manager::lastStatusText();
   const char* otaError = OTA_Manager::lastErrorText();
   uint32_t otaAgeMs = OTA_Manager::lastCheckAgeMs();
-  int bootPin = factoryButtonPin();
-  bool bootPressed = factoryButtonIsPressed();
-  uint32_t bootHoldMs = factoryButtonHoldMs();
-  bool bootPending = factoryButtonRestartPending();
-  uint8_t rescueStreak = factoryQuickResetStreak();
-  bool rescueArmed = factoryQuickResetClearArmed();
-  uint32_t rescueClrMs = factoryQuickResetClearRemainingMs();
-  int resetReason = factoryLastResetReason();
   if (staOk) {
     wifiSsid = WiFi.SSID();
-    wifiLoc = normalizeLocationLabel(wifiLocationForSsid(wifiSsid));
-    wifiAddr = wifiAddressForSsid(wifiSsid);
+    wifiLoc = wifiLocationForSsid(wifiSsid);
     ipStr = WiFi.localIP().toString();
   }
-
-  geoAddr = jsonEscape(geoAddr);
-  geoSource = jsonEscape(geoSource);
-  geoStatus = jsonEscape(geoStatus);
-  geoErr = jsonEscape(geoErr);
 
   int alarmLv = 0;
   const char* alarmTxt = "Sistem normal";
@@ -1985,55 +2083,56 @@ static void handleStatus() {
     s_jsonBuf, sizeof(s_jsonBuf),
     "{\"lInt\":%d,\"onD\":%lu,\"offD\":%lu,\"stable\":%d,"
     "\"cpHigh\":%.2f,\"cpLow\":%.2f,\"adcHigh\":%.3f,\"adcLow\":%.3f,"
-    "\"stateRaw\":\"%s\",\"ia\":%.2f,\"ib\":%.2f,\"ic\":%.2f,"
+    "\"stateRaw\":\"%s\",\"ia\":%.2f,\"ib\":%.2f,\"ic\":%.2f,\"iAvg\":%.2f,"
     "\"pW\":%.1f,\"eKWh\":%.3f,\"tSec\":%lu,\"phase\":%d,\"rLbl\":\"%s\","
-    "\"wifiSsid\":\"%s\",\"wifiLoc\":\"%s\",\"wifiAddr\":\"%s\",\"ip\":\"%s\",\"host\":\"%s\","
-    "\"geoAddr\":\"%s\",\"geoSource\":\"%s\",\"geoStatus\":\"%s\",\"geoErr\":\"%s\",\"geoAgeMs\":%lu,\"geoLat\":%.6f,\"geoLng\":%.6f,\"geoAccM\":%.1f,\"geoKeySet\":%d,"
+    "\"wifiSsid\":\"%s\",\"wifiLoc\":\"%s\",\"ip\":\"%s\",\"host\":\"%s\",\"mac\":\"%s\",\"stationCode\":\"%s\",\"stationName\":\"%s\",\"stationAddr\":\"%s\","
     "\"state\":\"%s\",\"div\":%.3f,\"thb\":%.2f,\"thc\":%.2f,\"thd\":%.2f,\"the\":%.2f,"
     "\"icalA\":%.2f,\"icalB\":%.2f,\"icalC\":%.2f,\"ioffA\":%.2f,\"ioffB\":%.2f,\"ioffC\":%.2f,"
     "\"rngLowMax\":%.2f,\"rngMidMax\":%.2f,\"rngLowOff\":%.2f,\"rngMidOff\":%.2f,"
-    "\"otaCur\":\"%s\",\"otaRemote\":\"%s\",\"otaPart\":\"%s\",\"otaImgState\":\"%s\",\"otaStatus\":\"%s\",\"otaAgeMs\":%lu,\"otaErr\":\"%s\","
     "\"modeId\":%d,\"mode\":\"%s\",\"limitA\":%.1f,\"staOk\":%d,"
+    "\"mapLat\":%.5f,\"mapLng\":%.5f,\"mapRadius\":%u,"
+    "\"otaCur\":\"%s\",\"otaRemote\":\"%s\",\"otaPart\":\"%s\",\"otaImgState\":\"%s\",\"otaStatus\":\"%s\",\"otaErr\":\"%s\",\"otaAgeMs\":%lu,"
     "\"alarmLv\":%d,\"alarmTxt\":\"%s\","
     "\"sLive\":%d,\"sLiveStart\":%lu,\"sLiveSec\":%lu,\"sLiveKWh\":%.3f,"
-    "\"rstTotal\":%lu,\"rstNow\":%lu,\"rstHist\":%lu,\"rstLastSec\":%lu,\"rstLastMode\":\"%s\","
-    "\"bootPin\":%d,\"bootPressed\":%d,\"bootHoldMs\":%lu,\"bootPending\":%d,"
-    "\"rescueStreak\":%u,\"rescueArmed\":%d,\"rescueClrMs\":%lu,\"resetReason\":%d}",
+    "\"rstTotal\":%lu,\"rstNow\":%lu,\"rstHist\":%lu,\"rstLastSec\":%lu,\"rstLastMode\":\"%s\"}",
     loopIntervalMs,
     (unsigned long)relayOnDelayMs,
     (unsigned long)relayOffDelayMs,
     stableCount,
     cpHigh, cpLow, adcHigh, adcLow,
     m.stateRaw.c_str(),
-    ia, ib, ic,
+    ia, ib, ic, iAvg,
     pW, eKWh,
     (unsigned long)g_chargeSeconds,
     g_phaseCount,
     relayLabel,
     wifiSsid.c_str(),
     wifiLoc.c_str(),
-    wifiAddr.c_str(),
     ipStr.c_str(),
     hostStr.c_str(),
-    geoAddr.c_str(),
-    geoSource.c_str(),
-    geoStatus.c_str(),
-    geoErr.c_str(),
-    (unsigned long)geoAgeMs,
-    safeFinite(s_geo.lat),
-    safeFinite(s_geo.lng),
-    safeFinite(s_geo.accuracyM),
-    geoKeyConfigured() ? 1 : 0,
+    macStr.c_str(),
+    stationCodeStr.c_str(),
+    stationNameStr.c_str(),
+    kStationAddress,
     m.stateStable.c_str(),
     CP_DIVIDER_RATIO,
     TH_B_MIN, TH_C_MIN, TH_D_MIN, TH_E_MIN,
     calA, calB, calC, offA, offB, offC,
     rngLowMax, rngMidMax, rngLowOff, rngMidOff,
-    otaCurrent, otaRemote, otaPart, otaImgState, otaStatus, (unsigned long)otaAgeMs, otaError,
     g_chargeMode,
     chargeModeLabel(g_chargeMode),
     safeFinite(g_currentLimitA),
     staOk ? 1 : 0,
+    kMapLat,
+    kMapLng,
+    (unsigned)kMapRadiusM,
+    otaCurrent,
+    otaRemote,
+    otaPart,
+    otaImgState,
+    otaStatus,
+    otaError,
+    (unsigned long)otaAgeMs,
     alarmLv,
     alarmTxt,
     g_sessionLive ? 1 : 0,
@@ -2044,26 +2143,19 @@ static void handleStatus() {
     (unsigned long)s_resetNowCount,
     (unsigned long)s_resetHistoryCount,
     (unsigned long)s_resetLastSec,
-    resetModeLabel(s_resetLastModeId),
-    bootPin,
-    bootPressed ? 1 : 0,
-    (unsigned long)bootHoldMs,
-    bootPending ? 1 : 0,
-    (unsigned)rescueStreak,
-    rescueArmed ? 1 : 0,
-    (unsigned long)rescueClrMs,
-    resetReason
+    resetModeLabel(s_resetLastModeId)
   );
 
   server.send(200, "application/json", s_jsonBuf);
+  noteHttpResponseSent();
 }
 
 // Gecmis seanslar icin ayri JSON endpoint.
 static void handleHistory() {
-  char json[4096];
+  noteWebActivity();
   int n = 0;
   n += snprintf(
-    json + n, sizeof(json) - n,
+    s_jsonBuf + n, sizeof(s_jsonBuf) - n,
     "{\"count\":%d,\"active\":{\"on\":%d,\"start\":%lu,\"sec\":%lu,\"kWh\":%.3f},\"items\":[",
     g_histCount,
     g_sessionLive ? 1 : 0,
@@ -2073,10 +2165,10 @@ static void handleHistory() {
   );
 
   int start = (g_histCount < 20) ? 0 : g_histHead;
-  for (int i = 0; i < g_histCount && n < (int)sizeof(json) - 2; i++) {
+  for (int i = 0; i < g_histCount && n < (int)sizeof(s_jsonBuf) - 2; i++) {
     int idx = (start + i) % 20;
     n += snprintf(
-      json + n, sizeof(json) - n,
+      s_jsonBuf + n, sizeof(s_jsonBuf) - n,
       "%s{\"s\":%lu,\"d\":%lu,\"e\":%.3f,\"p\":%.1f,\"ph\":%u}",
       (i == 0) ? "" : ",",
       (unsigned long)g_histStartSec[idx],
@@ -2086,8 +2178,9 @@ static void handleHistory() {
       (unsigned)g_histPhaseCount[idx]
     );
   }
-  snprintf(json + n, sizeof(json) - n, "]}");
-  server.send(200, "application/json", json);
+  snprintf(s_jsonBuf + n, sizeof(s_jsonBuf) - n, "]}");
+  server.send(200, "application/json", s_jsonBuf);
+  noteHttpResponseSent();
 }
 
 // Kullanici panelindeki AUTO / START / STOP komutu burada islenir.
@@ -2114,6 +2207,7 @@ static void handleChargeCmd() {
   }
 
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 // Enerji ve gecmis sifirlama endpoint'i.
@@ -2141,6 +2235,7 @@ static void handleDataReset() {
     clearHistory ? 1 : 0
   );
   server.send(200, "application/json", json);
+  noteHttpResponseSent();
 }
 
 // Web admin panelinden gelen CP / relay / timing ayarlari burada uygulanir.
@@ -2211,34 +2306,40 @@ static void handleCalibApply() {
   current_sensor_set_calibration(calA, calB, calC, offA, offB, offC);
   current_sensor_set_range_profile(rngLowMax, rngMidMax, rngLowOff, rngMidOff);
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 static void handleRelay() {
   if (server.hasArg("on")) relay_set(server.arg("on") == "1");
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 static void handleRelayAuto() {
   if (server.hasArg("en")) relay_set_auto_enabled(server.arg("en") == "1");
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 static void handlePulseReset() {
   if (!requireAdminAuth()) return;
   pulseGpio(MOSFET_RESET_PIN);
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 static void handlePulseSet() {
   if (!requireAdminAuth()) return;
   pulseGpio(MOSFET_SET_PIN);
   server.send(200, "text/plain", "OK");
+  noteHttpResponseSent();
 }
 
 
 // 4) Route kayitlari ve servis baslatma.
 void web_init() {
   // Boot sirasinda ag, OTA, route ve web server bu noktada ayaga kalkar.
+  Serial.println("[WEB] web_init start");
   setupWiFi();
   setupArduinoOta();
   s_resetPrefsReady = s_resetPrefs.begin("evse", false);
@@ -2247,13 +2348,6 @@ void web_init() {
   } else {
     Serial.println("[RST] NVS init fail");
   }
-  s_geoPrefsReady = s_geoPrefs.begin("evsegeo", false);
-  if (s_geoPrefsReady) {
-    loadGeoState();
-  } else {
-    Serial.println("[GEO] NVS init fail");
-  }
-  scheduleGeoRefresh(kGeoBootDelayMs);
   pinMode(MOSFET_RESET_PIN, OUTPUT);
   pinMode(MOSFET_SET_PIN, OUTPUT);
   digitalWrite(MOSFET_RESET_PIN, LOW);
@@ -2271,7 +2365,6 @@ void web_init() {
   server.on("/ota_check", HTTP_GET, handleOtaCheck);
   server.on("/boot_factory", HTTP_GET, handleBootFactory);
   server.on("/boot_prev", HTTP_GET, handleBootPrev);
-  server.on("/geo_config", HTTP_POST, handleGeoConfig);
   // Captive portal probe endpoints (Android/iOS/Windows)
   server.on("/generate_204", HTTP_GET, handleRoot);
   server.on("/hotspot-detect.html", HTTP_GET, handleRoot);
@@ -2286,13 +2379,32 @@ void web_init() {
   server.on("/pulse_reset", HTTP_GET, handlePulseReset);
   server.on("/pulse_set", HTTP_GET, handlePulseSet);
   server.onNotFound(handleRoot);
-  server.begin();
-  s_serverStarted = true;
+  s_serverStarted = false;
+  ensureServerStarted();
+  if (s_webTaskHandle == nullptr) {
+    BaseType_t taskOk = xTaskCreatePinnedToCore(
+      web_task_runner,
+      "webLoop",
+      6144,
+      nullptr,
+      1,
+      &s_webTaskHandle,
+      1
+    );
+    if (taskOk == pdPASS) {
+      Serial.println("[WEB] web task started");
+    } else {
+      s_webTaskHandle = nullptr;
+      Serial.println("[WEB] web task start FAILED");
+    }
+  }
+  Serial.println("[WEB] web_init done");
 }
 
-void web_loop() {
+static void web_tick() {
   // Arka plan servisleri her loop'ta buradan yurutulur.
-  s_lastWebLoopMs = millis();
+  ensureServerStarted();
+  if (!s_serverStarted) return;
   server.handleClient();
 
   if (s_manualOtaRebootPending && (int32_t)(millis() - s_manualOtaRebootAtMs) >= 0) {
@@ -2302,21 +2414,12 @@ void web_loop() {
     ESP.restart();
   }
 
-  // WiFi yeniden baglanti denemesi: seyrek ve kisa timeout ile.
+  // WiFi yeniden baglanti denemesi: kisa timeout ile tekrar dene, uzun tarama ile donguyu kilitleme.
   static uint32_t lastWifiTryMs = 0;
   const uint32_t nowTry = millis();
-  if (WiFi.status() != WL_CONNECTED && (nowTry - lastWifiTryMs >= 30000)) {
+  if (WiFi.status() != WL_CONNECTED && (nowTry - lastWifiTryMs >= 10000)) {
     lastWifiTryMs = nowTry;
-    wifiMulti.run(120);
-  }
-
-  bool geoDue =
-      s_geoNextRefreshMs != 0 &&
-      geoKeyConfigured() &&
-      (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0) &&
-      (int32_t)(millis() - s_geoNextRefreshMs) >= 0;
-  if (geoDue) {
-    refreshGeoFromIp(false);
+    wifiMulti.run(1000);
   }
 
   static bool printed = false;
@@ -2330,7 +2433,7 @@ void web_loop() {
       Serial.print("STA IP: ");
       Serial.println(WiFi.localIP());
       Serial.print("HOST: http://");
-      Serial.print(kHostName);
+      Serial.print(currentHostName());
       Serial.println(".local");
     }
   } else {
@@ -2346,9 +2449,21 @@ void web_loop() {
   refreshMdns();
 }
 
-bool web_ready_for_ota_validation() {
-  bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
-  if (!staOk || !s_serverStarted || s_lastWebLoopMs == 0) return false;
-  return (millis() - s_lastWebLoopMs) < 1500;
+static void web_task_runner(void* /*arg*/) {
+  for (;;) {
+    web_tick();
+    vTaskDelay(pdMS_TO_TICKS(2));
+  }
 }
 
+void web_loop() {
+  if (s_webTaskHandle != nullptr) return;
+  web_tick();
+}
+
+bool web_ready_for_ota_validation() {
+  bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
+  if (!staOk) return false;
+  if (s_successfulHttpResponses == 0) return false;
+  return s_lastHttpRequestMs != 0;
+}
