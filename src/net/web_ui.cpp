@@ -817,9 +817,9 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 .carWrap::after{content:"";position:absolute;left:14%;right:14%;bottom:10%;height:58px;border-radius:999px;background:radial-gradient(ellipse at center, rgba(42,221,169,.18) 0%, rgba(42,221,169,.09) 30%, rgba(6,16,26,0) 74%),radial-gradient(ellipse at center, rgba(4,12,20,.5) 0%, rgba(4,12,20,.2) 42%, rgba(4,12,20,0) 76%);filter:blur(8px);z-index:1;animation:platformPulse 6.5s ease-in-out infinite;}
 .carHalo{position:absolute;inset:8% 6% 12%;border-radius:48px;background:radial-gradient(circle at 50% 48%, rgba(210,255,243,.18) 0%, color-mix(in srgb,var(--accent) 48%, white) 22%, rgba(65,177,255,.16) 52%, rgba(255,255,255,0) 82%);filter:blur(14px);opacity:.94;z-index:2;animation:haloBreath 6.2s ease-in-out infinite;}
 .carFill{position:absolute;inset:0;--fillColor:rgba(124,210,112,.86);--alpha:0;--car-img:none;-webkit-mask-image:var(--car-img);mask-image:var(--car-img);-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;overflow:hidden;opacity:var(--alpha);transition:opacity .7s ease;z-index:3;}
-.carFillInner{position:absolute;left:0;right:0;bottom:0;height:0%;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 46%, white) 0%, var(--accent) 48%, var(--accentDeep) 100%);box-shadow:0 0 28px color-mix(in srgb,var(--accentDeep) 32%, transparent) inset;transition:height .55s ease,background-color .55s ease;}
-.carFill.stateA{--alpha:.42;--fillColor:rgba(102,199,255,.82)}
-.carFill.stateA .carFillInner{animation:carIdleFill 7.2s ease-in-out infinite;}
+.carFillInner{position:absolute;left:0;right:0;bottom:0;height:0%;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 46%, white) 0%, var(--accent) 48%, var(--accentDeep) 100%);box-shadow:0 0 28px color-mix(in srgb,var(--accentDeep) 32%, transparent) inset;transform-origin:center bottom;transition:height .55s ease,background-color .55s ease,transform .4s ease,opacity .4s ease;}
+.carFill.stateA{--alpha:.38;--fillColor:rgba(102,199,255,.82)}
+.carFill.stateA .carFillInner{height:14%;opacity:.88;animation:carIdleFill 3.8s ease-in-out infinite;}
 .carFill.stateB{--alpha:.72;--fillColor:rgba(122,230,196,.86)}
 .carFill.stateC,.carFill.stateD{--alpha:1;--fillColor:rgba(55,216,162,.92)}
 .carFill.stateC .carFillInner,.carFill.stateD .carFillInner{animation:carChargeFill 5.8s ease-in-out infinite;}
@@ -861,7 +861,7 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 @keyframes platformPulse{0%,100%{opacity:.78;transform:scaleX(.96)}50%{opacity:1;transform:scaleX(1.02)}}
 @keyframes livePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.22)}}
 @keyframes carChargeFill{0%{transform:translateY(0)}50%{transform:translateY(-11px)}100%{transform:translateY(0)}}
-@keyframes carIdleFill{0%,100%{transform:translateY(0);opacity:.72}50%{transform:translateY(-5px);opacity:1}}
+@keyframes carIdleFill{0%,100%{transform:scaleY(.78);opacity:.66}50%{transform:scaleY(1.12);opacity:1}}
 @keyframes carFaultPulse{0%,100%{filter:brightness(1) saturate(1)}50%{filter:brightness(1.16) saturate(1.18)}}
 @media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.mapPanel{inset:62px 0 0}.mapTop{top:14px;left:12px;right:12px;align-items:flex-start}.mapStationBadge{max-width:228px}.mapAction{padding:9px 13px}.carStage{max-width:292px;margin-top:18px}.carWrap{max-width:326px;min-height:160px}.carSvg{max-width:326px}.stationFocus{margin:14px auto 14px;gap:8px}.stationFocusMark{width:88px;height:88px}.stationFocusLabel{font-size:14px;padding:8px 11px}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}}
 @media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.mapTop{gap:8px}.mapStationBadge{max-width:196px;padding:7px 12px 7px 7px}.mapStationGlyph{width:30px;height:30px}.mapStationGlyph svg{width:15px;height:15px}.mapTitle{font-size:15px}.mapPanel{inset:58px 0 0}.carStage{max-width:276px;margin-top:14px}.carWrap{max-width:308px;min-height:152px}.carSvg{max-width:308px}.stationFocus{margin:12px auto 12px;gap:7px}.stationFocusMark{width:74px;height:74px}.stationFocusPin{width:26px;height:26px}.stationFocusPin svg{width:12px;height:12px}.stationFocusHint{font-size:10px}.stationFocusLabel{font-size:13px;padding:7px 9px}.metricCard{margin-top:16px;padding:16px 16px}.placeActions{flex-direction:column}}
@@ -1034,12 +1034,15 @@ function updateCar(d){
   else if(st==="D") carEls.carFill.classList.add("stateD");
   else if(st==="E") carEls.carFill.classList.add("stateE");
   else if(st==="F") carEls.carFill.classList.add("stateF");
+  if(st==="A"){
+    carEls.carFillInner.style.height="";
+    return;
+  }
   const socVal=Number.isFinite(d.soc)?d.soc:(Number.isFinite(d.batt)?d.batt:null);
   let pctRaw=Number.isFinite(socVal)?socVal:Math.round((Number(d.eKWh)||0)/BAT_KWH*100);
   pctRaw=Math.max(0,Math.min(100,pctRaw));
   let fillPct=pctRaw;
   if(charging) fillPct=Math.max(fillPct,8);
-  else if(st==="A") fillPct=Math.max(fillPct,10);
   else if(isCable) fillPct=Math.max(fillPct,12);
   else if(isError) fillPct=Math.max(fillPct,24);
   carEls.carFillInner.style.height=Math.max(0,Math.min(100,fillPct))+"%";
