@@ -777,6 +777,8 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 .placeBtn{flex:1;display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;border:1px solid rgba(87,215,175,.14);background:rgba(10,28,42,.58);color:#dffcf3;text-decoration:none;font-size:11px;font-weight:800}
 .placeBtn.primary{background:rgba(55,216,162,.16);border-color:rgba(55,216,162,.24)}
 .placeEmpty{padding:18px;border-radius:22px;border:1px dashed rgba(87,215,175,.18);background:rgba(8,20,31,.4);color:#9fcfc2;font-size:14px;line-height:1.5}
+.phaseMeta{margin-top:16px;display:flex;justify-content:space-between;gap:10px;font-size:14px;color:#8bb5a6;}
+.phaseMeta span{flex:1;padding:10px 12px;border-radius:16px;background:linear-gradient(180deg,rgba(12,32,50,.58),rgba(8,22,36,.38));border:1px solid rgba(151,210,255,.08);text-align:center}
 .topbar{display:grid;grid-template-columns:44px 1fr 52px;align-items:center;gap:10px;}
 .backBtn{width:44px;height:44px;border-radius:16px;display:grid;place-items:center;text-decoration:none;color:#dff9f0;font-size:30px;line-height:1;background:linear-gradient(180deg,rgba(18,42,61,.92),rgba(9,22,35,.88));border:1px solid rgba(79,225,178,.16);box-shadow:var(--shadowSoft);}
 .statusWrap{display:flex;justify-content:center;}
@@ -902,6 +904,33 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 	      <div class="stationFocusLabel" id="stationFocusLabel">Rotosis Istasyonu</div>
 	    </div>
 	  </div>
+
+  <section class="metricCard">
+    <div class="dateLine" id="stationLabel">Istasyon</div>
+    <div class="locationLine" id="wifiLine">Wi-Fi: bagli degil</div>
+    <div class="mapMetaRow" style="margin-top:14px">
+      <div class="mapMeta">
+        <div class="mapMetaLabel">Koordinat</div>
+        <div class="mapMetaValue mono" id="mapCoords">-</div>
+      </div>
+      <div class="mapMeta">
+        <div class="mapMetaLabel">Yaricap</div>
+        <div class="mapMetaValue mono" id="radiusText">-</div>
+      </div>
+      <div class="mapMeta">
+        <div class="mapMetaLabel">Nokta</div>
+        <div class="mapMetaValue mono" id="nearbyCount">0</div>
+      </div>
+    </div>
+    <div class="placesHead" style="margin-top:16px">
+      <div class="placesTitle">Konum ve Harita</div>
+      <div class="placesStatus" id="placesStatus">Harita verisi bekleniyor</div>
+    </div>
+    <div class="mapLegend" id="chipRow" style="margin-top:10px"></div>
+    <div class="placesList" id="placesList" style="margin-top:12px">
+      <div class="placeEmpty">Konum bilgisi geldikten sonra yakindaki yerler burada listelenecek.</div>
+    </div>
+  </section>
 
   <section class="metricCard metricCard--stats">
     <div class="metricCardDate" id="dateLabel">-</div>
@@ -1448,7 +1477,7 @@ function pull(){
     const ia=Number(d.ia)||0, ib=Number(d.ib)||0, ic=Number(d.ic)||0;
     const it=ia+ib+ic;
     const phaseCount=Math.max(1,Number(d.phase)||1);
-    const limitA=Math.max(6,Number(d.limitA)||32);
+    const limitA=Math.max(6,Number(d.limitTargetA ?? d.limitA)||32);
     const totalLimit=phaseCount*limitA;
     const loadPct=clamp((it/totalLimit)*100,0,100);
     const powerKw=((Number(d.pW)||0)/1000.0);
@@ -1775,6 +1804,7 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
     </div>
     <div class="small" id="wifiScanStatus">Tarama hazir degil</div>
     <div class="small" id="wifiCurrentMode">Baglanti profili: varsayilan liste</div>
+    <div class="small" id="wifiConnectedInfo">Mevcut baglanti: bagli degil</div>
     <div id="wifiScanList" class="small"></div>
   </div>
 
@@ -1898,6 +1928,12 @@ function applyWifiStatus(d){
     modeLine.textContent = d.wifiCfgEnabled
       ? ('Baglanti profili: ' + (d.wifiCfgSsid || '-') + ' / ' + ((d.wifiCfgMode || 'dhcp').toUpperCase()))
       : 'Baglanti profili: varsayilan liste';
+  }
+  const connectedLine=document.getElementById('wifiConnectedInfo');
+  if(connectedLine){
+    connectedLine.textContent = (d.wifiSsid && d.wifiSsid !== '-')
+      ? ('Mevcut baglanti: ' + d.wifiSsid + ((d.wifiLoc && d.wifiLoc !== '-') ? (' / ' + d.wifiLoc) : ''))
+      : 'Mevcut baglanti: bagli degil';
   }
 }
 function showSection(id, visible){
@@ -2100,7 +2136,7 @@ function pull(force=false){
     setInput('onD', d.onD, force);
     setInput('offD', d.offD, force);
     setInput('stb', d.stable, force);
-    setInput('limitASet', d.limitA, force);
+    setInput('limitASet', (d.limitTargetA !== undefined) ? d.limitTargetA : d.limitA, force);
     setInput('div', d.div, force);
     setInput('thb', d.thb, force);
     setInput('thc', d.thc, force);
@@ -2633,7 +2669,7 @@ static void handleStatus() {
     "\"state\":\"%s\",\"div\":%.3f,\"thb\":%.2f,\"thc\":%.2f,\"thd\":%.2f,\"the\":%.2f,"
     "\"icalA\":%.2f,\"icalB\":%.2f,\"icalC\":%.2f,\"ioffA\":%.2f,\"ioffB\":%.2f,\"ioffC\":%.2f,"
     "\"rngLowMax\":%.2f,\"rngMidMax\":%.2f,\"rngLowOff\":%.2f,\"rngMidOff\":%.2f,"
-    "\"modeId\":%d,\"mode\":\"%s\",\"limitA\":%.1f,\"staOk\":%d,"
+    "\"modeId\":%d,\"mode\":\"%s\",\"limitA\":%.1f,\"limitTargetA\":%.1f,\"staOk\":%d,"
     "\"mapLat\":%.5f,\"mapLng\":%.5f,\"mapRadius\":%u,"
     "\"otaCur\":\"%s\",\"otaRemote\":\"%s\",\"otaPart\":\"%s\",\"otaImgState\":\"%s\",\"otaStatus\":\"%s\",\"otaErr\":\"%s\",\"otaAgeMs\":%lu,"
     "\"alarmLv\":%d,\"alarmTxt\":\"%s\","
@@ -2674,6 +2710,7 @@ static void handleStatus() {
     g_chargeMode,
     chargeModeLabel(g_chargeMode),
     safeFinite(g_currentLimitA),
+    safeFinite(g_targetCurrentLimitA),
     staOk ? 1 : 0,
     s_mapLat,
     s_mapLng,
