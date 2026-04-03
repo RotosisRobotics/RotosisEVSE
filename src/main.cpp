@@ -14,7 +14,7 @@
 #include "OTA_Manager.h"
 
 static constexpr char kOtaManifestUrl[] =
-  "https://raw.githubusercontent.com/turgaycam/evseyedek/main/version.json";
+  "https://raw.githubusercontent.com/RotosisRobotics/RotosisEVSE/main/version.json";
 static constexpr char kGitHubFingerprint[] = "";
 static constexpr uint32_t kOtaAutoCheckIntervalMs = 60UL * 60UL * 1000UL;
 static constexpr uint8_t kMaxConsecutiveWdtResets = 3;

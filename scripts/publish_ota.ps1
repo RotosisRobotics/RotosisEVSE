@@ -34,7 +34,7 @@ $sha256 = (Get-FileHash -LiteralPath $targetBin -Algorithm SHA256).Hash.ToLowerI
 
 $manifest = [ordered]@{
     version = $Version
-    url = "https://raw.githubusercontent.com/turgaycam/evseyedek/main/firmware/$TargetName"
+    url = "https://raw.githubusercontent.com/RotosisRobotics/RotosisEVSE/main/firmware/$TargetName"
     size = [uint32]$sizeBytes
     sha256 = $sha256
 }
