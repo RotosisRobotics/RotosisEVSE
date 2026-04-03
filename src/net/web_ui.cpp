@@ -147,14 +147,17 @@ static const char* kAdminUser = EVSE_ADMIN_USER;
 static const char* kAdminPassword = EVSE_ADMIN_PASSWORD;
 static const char* kHostNameBase = EVSE_HOSTNAME;
 static const char* kStationName = "Rotosis Robotlu Otomasyon";
-static const char* kStationAddress = "Fevzi Cakmak Mah. Sehit Ibrahim Betin Cd. No:4/F, Arli Sanayi Sitesi, Karatay / Konya";
-static constexpr double kMapLat = 37.94559;
-static constexpr double kMapLng = 32.58082;
+static const char* kDefaultStationAddress = "Fevzi Cakmak Mah. Sehit Ibrahim Betin Cd. No:4/F, Arli Sanayi Sitesi, Karatay / Konya";
+static constexpr double kDefaultMapLat = 37.94559;
+static constexpr double kDefaultMapLng = 32.58082;
 static constexpr uint16_t kMapRadiusM = 520;
 static char s_deviceMac[18] = "";
 static char s_stationCode[7] = "";
 static char s_stationLabel[32] = "Istasyon";
 static char s_hostName[32] = EVSE_HOSTNAME;
+static char s_stationAddress[160] = "";
+static double s_mapLat = kDefaultMapLat;
+static double s_mapLng = kDefaultMapLng;
 
 struct KnownWifi {
   const char* location;
@@ -202,6 +205,58 @@ static uint32_t s_manualOtaRebootAtMs = 0;
 
 static bool hasText(const char* value) {
   return value != nullptr && value[0] != '\0';
+}
+
+static bool isValidLatitude(double value) {
+  return value >= -90.0 && value <= 90.0;
+}
+
+static bool isValidLongitude(double value) {
+  return value >= -180.0 && value <= 180.0;
+}
+
+static bool nearlyEqualCoord(double a, double b) {
+  return fabs(a - b) < 0.00001;
+}
+
+static void rebuildStationAddress() {
+  if (nearlyEqualCoord(s_mapLat, kDefaultMapLat) && nearlyEqualCoord(s_mapLng, kDefaultMapLng)) {
+    snprintf(s_stationAddress, sizeof(s_stationAddress), "%s", kDefaultStationAddress);
+    return;
+  }
+
+  snprintf(
+    s_stationAddress,
+    sizeof(s_stationAddress),
+    "Secilen konum: %.5f, %.5f",
+    s_mapLat,
+    s_mapLng
+  );
+}
+
+static void loadLocationSettings() {
+  if (s_resetPrefsReady) {
+    double storedLat = s_resetPrefs.getDouble("mapLat", kDefaultMapLat);
+    double storedLng = s_resetPrefs.getDouble("mapLng", kDefaultMapLng);
+    if (isValidLatitude(storedLat) && isValidLongitude(storedLng)) {
+      s_mapLat = storedLat;
+      s_mapLng = storedLng;
+    } else {
+      s_mapLat = kDefaultMapLat;
+      s_mapLng = kDefaultMapLng;
+    }
+  } else {
+    s_mapLat = kDefaultMapLat;
+    s_mapLng = kDefaultMapLng;
+  }
+
+  rebuildStationAddress();
+}
+
+static void saveLocationSettings() {
+  if (!s_resetPrefsReady) return;
+  s_resetPrefs.putDouble("mapLat", s_mapLat);
+  s_resetPrefs.putDouble("mapLng", s_mapLng);
 }
 
 static void refreshDeviceIdentity() {
@@ -1482,8 +1537,15 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
       <div class="kv"><div class="k">Wi-Fi</div><div class="v mono"><span id="wifiSsid">-</span> (<span id="wifiLoc">-</span>)</div></div>
       <div class="kv"><div class="k">IP</div><div class="v mono"><span id="ip">-</span></div></div>
       <div class="kv"><div class="k">Host</div><div class="v mono"><span id="host">-</span></div></div>
-      <div class="kv"><div class="k">Relay</div><div class="v mono"><span id="rLbl">-</span></div></div>
+    <div class="kv"><div class="k">Relay</div><div class="v mono"><span id="rLbl">-</span></div></div>
     </div>
+
+    <div class="sep"></div>
+
+    <h2>ISTASYON KONUMU</h2>
+    <div class="kv"><div class="k">Latitude / Longitude</div><div class="v grid2"><input id="mapLat" onfocus="p()" onblur="r()" placeholder="37.94559"><input id="mapLng" onfocus="p()" onblur="r()" placeholder="32.58082"></div></div>
+    <div class="kv"><div class="k">Uretilen adres</div><div class="v mono"><span id="stationAddr">-</span></div></div>
+    <div class="small">Konum kaydedildiginde harita merkezi ve istasyon adres metni bu koordinatlara gore guncellenir.</div>
 
     <div class="sep"></div>
 
@@ -1634,6 +1696,7 @@ function pull(force=false){
     document.getElementById('ip').textContent = d.ip || '-';
     document.getElementById('host').textContent = d.host || '-';
     document.getElementById('rLbl').textContent = d.rLbl || '-';
+    document.getElementById('stationAddr').textContent = d.stationAddr || '-';
     document.getElementById('rstTotal').textContent = d.rstTotal || 0;
     document.getElementById('rstNow').textContent = d.rstNow || 0;
     document.getElementById('rstHist').textContent = d.rstHist || 0;
@@ -1675,6 +1738,8 @@ function pull(force=false){
     setInput('rngMidMax', d.rngMidMax, force);
     setInput('rngLowOff', d.rngLowOff, force);
     setInput('rngMidOff', d.rngMidOff, force);
+    setInput('mapLat', d.mapLat, force);
+    setInput('mapLng', d.mapLng, force);
   });
 }
 function applyCal(){
@@ -1698,6 +1763,8 @@ function applyCal(){
   q.append('rngMidMax', document.getElementById('rngMidMax').value);
   q.append('rngLowOff', document.getElementById('rngLowOff').value);
   q.append('rngMidOff', document.getElementById('rngMidOff').value);
+  q.append('mapLat', document.getElementById('mapLat').value);
+  q.append('mapLng', document.getElementById('mapLng').value);
   if(document.activeElement) document.activeElement.blur();
   fetch('/calib_apply?' + q.toString()).then(() => {
     alert('Tamam');
@@ -2105,7 +2172,7 @@ static void handleStatus() {
     macStr.c_str(),
     stationCodeStr.c_str(),
     stationNameStr.c_str(),
-    kStationAddress,
+    s_stationAddress,
     m.stateStable.c_str(),
     CP_DIVIDER_RATIO,
     TH_B_MIN, TH_C_MIN, TH_D_MIN, TH_E_MIN,
@@ -2115,8 +2182,8 @@ static void handleStatus() {
     chargeModeLabel(g_chargeMode),
     safeFinite(g_currentLimitA),
     staOk ? 1 : 0,
-    kMapLat,
-    kMapLng,
+    s_mapLat,
+    s_mapLng,
     (unsigned)kMapRadiusM,
     otaCurrent,
     otaRemote,
@@ -2236,6 +2303,7 @@ static void handleCalibApply() {
   float calA = 0.0f, calB = 0.0f, calC = 0.0f;
   float offA = 0.0f, offB = 0.0f, offC = 0.0f;
   float rngLowMax = 0.0f, rngMidMax = 0.0f, rngLowOff = 0.0f, rngMidOff = 0.0f;
+  bool locationChanged = false;
   current_sensor_get_calibration(&calA, &calB, &calC, &offA, &offB, &offC);
   current_sensor_get_range_profile(&rngLowMax, &rngMidMax, &rngLowOff, &rngMidOff);
   if (server.hasArg("lInt")) {
@@ -2295,8 +2363,26 @@ static void handleCalibApply() {
   if (server.hasArg("rngMidOff")) {
     rngMidOff = clampFloatArg(server.arg("rngMidOff"), -10.0f, 10.0f, rngMidOff);
   }
+  if (server.hasArg("mapLat")) {
+    double candidate = server.arg("mapLat").toDouble();
+    if (isValidLatitude(candidate)) {
+      s_mapLat = candidate;
+      locationChanged = true;
+    }
+  }
+  if (server.hasArg("mapLng")) {
+    double candidate = server.arg("mapLng").toDouble();
+    if (isValidLongitude(candidate)) {
+      s_mapLng = candidate;
+      locationChanged = true;
+    }
+  }
   current_sensor_set_calibration(calA, calB, calC, offA, offB, offC);
   current_sensor_set_range_profile(rngLowMax, rngMidMax, rngLowOff, rngMidOff);
+  if (locationChanged) {
+    rebuildStationAddress();
+    saveLocationSettings();
+  }
   server.send(200, "text/plain", "OK");
   noteHttpResponseSent();
 }
@@ -2340,6 +2426,7 @@ void web_init() {
   } else {
     Serial.println("[RST] NVS init fail");
   }
+  loadLocationSettings();
   pinMode(MOSFET_RESET_PIN, OUTPUT);
   pinMode(MOSFET_SET_PIN, OUTPUT);
   digitalWrite(MOSFET_RESET_PIN, LOW);
