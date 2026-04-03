@@ -1778,7 +1778,7 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
     <div id="wifiScanList" class="small"></div>
   </div>
 
-  <div class="card pageSection" id="opsCard">
+  <div class="card pageSection" id="testCard">
     <div class="sep"></div>
 
     <h2>ROLE</h2>
@@ -1796,8 +1796,10 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
       <button class="primary" onclick="send('/pulse_set')">SET (GPIO 15)</button>
     </div>
     <div class="small">Not: 100ms HIGH darbe yollar.</div>
-    <div class="sep"></div>
+  </div>
 
+  <div class="card pageSection" id="otaCard">
+    <div class="sep"></div>
     <h2>SIFIRLAMA GECMISI</h2>
     <div class="kv"><div class="k">Toplam</div><div class="v mono"><span id="rstTotal">0</span></div></div>
     <div class="kv"><div class="k">Anlik / Gecmis</div><div class="v mono"><span id="rstNow">0</span> / <span id="rstHist">0</span></div></div>
@@ -1910,11 +1912,12 @@ function setActiveNav(id){
 }
 function applyPageMode(){
   const mode=PAGE_MODE || 'admin';
-  showSection('liveCard', true);
-  showSection('statusCard', true);
+  showSection('liveCard', mode==='admin');
+  showSection('statusCard', mode==='admin');
   showSection('calibrationCard', mode==='calibration');
   showSection('wifiCard', mode==='wifi');
-  showSection('opsCard', mode==='calibration');
+  showSection('testCard', mode==='calibration');
+  showSection('otaCard', mode==='wifi');
   if(mode==='wifi'){
     setActiveNav('navWifi');
   }else if(mode==='calibration'){
