@@ -2,10 +2,13 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
 #include <WebServer.h>
 #include <Update.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
+#include <WiFiClientSecure.h>
 #include <esp_ota_ops.h>
 #include <math.h>
 
@@ -235,13 +238,65 @@ static void rebuildStationAddress() {
   );
 }
 
+static bool fetchReverseGeocodedAddress(double lat, double lng, char* out, size_t outSize) {
+  if (out == nullptr || outSize == 0) return false;
+  if (WiFi.status() != WL_CONNECTED || WiFi.localIP()[0] == 0) return false;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setTimeout(5000);
+
+  String url = String("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=") +
+               String(lat, 6) + "&lon=" + String(lng, 6);
+  if (!http.begin(client, url)) return false;
+
+  http.addHeader("User-Agent", "RotosisEVSE/1.0");
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    http.end();
+    return false;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  StaticJsonDocument<1536> doc;
+  DeserializationError err = deserializeJson(doc, payload);
+  if (err) return false;
+
+  const char* displayName = doc["display_name"] | "";
+  if (!displayName[0]) return false;
+
+  snprintf(out, outSize, "%s", displayName);
+  return true;
+}
+
+static void refreshStationAddress(bool tryReverseGeocode) {
+  if (tryReverseGeocode) {
+    char resolved[160] = "";
+    if (fetchReverseGeocodedAddress(s_mapLat, s_mapLng, resolved, sizeof(resolved))) {
+      snprintf(s_stationAddress, sizeof(s_stationAddress), "%s", resolved);
+      return;
+    }
+  }
+  rebuildStationAddress();
+}
+
 static void loadLocationSettings() {
   if (s_resetPrefsReady) {
     double storedLat = s_resetPrefs.getDouble("mapLat", kDefaultMapLat);
     double storedLng = s_resetPrefs.getDouble("mapLng", kDefaultMapLng);
+    String storedAddr = s_resetPrefs.getString("mapAddr", "");
     if (isValidLatitude(storedLat) && isValidLongitude(storedLng)) {
       s_mapLat = storedLat;
       s_mapLng = storedLng;
+      if (storedAddr.length() > 0) {
+        snprintf(s_stationAddress, sizeof(s_stationAddress), "%s", storedAddr.c_str());
+        return;
+      }
     } else {
       s_mapLat = kDefaultMapLat;
       s_mapLng = kDefaultMapLng;
@@ -251,13 +306,14 @@ static void loadLocationSettings() {
     s_mapLng = kDefaultMapLng;
   }
 
-  rebuildStationAddress();
+  refreshStationAddress(false);
 }
 
 static void saveLocationSettings() {
   if (!s_resetPrefsReady) return;
   s_resetPrefs.putDouble("mapLat", s_mapLat);
   s_resetPrefs.putDouble("mapLng", s_mapLng);
+  s_resetPrefs.putString("mapAddr", s_stationAddress);
 }
 
 static void loadCurrentLimitSetting() {
@@ -2449,7 +2505,7 @@ static void handleCalibApply() {
   current_sensor_set_calibration(calA, calB, calC, offA, offB, offC);
   current_sensor_set_range_profile(rngLowMax, rngMidMax, rngLowOff, rngMidOff);
   if (locationChanged) {
-    rebuildStationAddress();
+    refreshStationAddress(true);
     saveLocationSettings();
   }
   server.send(200, "text/plain", "OK");
