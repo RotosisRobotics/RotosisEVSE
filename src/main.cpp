@@ -287,6 +287,7 @@ float g_energyKWh = 0.0f;
 uint32_t g_chargeSeconds = 0;
 int g_phaseCount = 1;
 float g_currentLimitA = 32.0f;
+float g_targetCurrentLimitA = 32.0f;
 
 // Hizli kontrol modu: 0=AUTO, 1=START, 2=STOP
 int g_chargeMode = 0;
@@ -386,6 +387,16 @@ static float duty_to_amps(int dutyPercent)
   return 0.0f;
 }
 
+static int amps_to_duty(float amps)
+{
+  if (amps < 6.0f) amps = 6.0f;
+  if (amps > 32.0f) amps = 32.0f;
+  int dutyPercent = (int)lroundf(amps / 0.6f);
+  if (dutyPercent < 10) dutyPercent = 10;
+  if (dutyPercent > 85) dutyPercent = 85;
+  return dutyPercent;
+}
+
 void setup()
 {
   // Baslatma sirasi bilincli tutuldu:
@@ -425,7 +436,7 @@ void setup()
   pilot_init();
 
   // Ilk PWM durumu
-  pwmDutyPercent = PWM_DUTY_32A;  // örn: 53
+  pwmDutyPercent = amps_to_duty(g_targetCurrentLimitA);
   pwmEnabled = false;            // boot'ta A kabul, PWM kapalı
   applyPwmIfChanged();
 }
@@ -495,8 +506,8 @@ void loop()
   if (anyPhase) {
     powerW = threePhase ? (vPhase * (ia + ib + ic)) : (vPhase * iMax);
   }
-  float limitA = duty_to_amps((pwmDutyPercent > 0) ? pwmDutyPercent : PWM_DUTY_32A);
-  if (limitA <= 0.0f) limitA = duty_to_amps(PWM_DUTY_32A);
+  float limitA = duty_to_amps((pwmDutyPercent > 0) ? pwmDutyPercent : amps_to_duty(g_targetCurrentLimitA));
+  if (limitA <= 0.0f) limitA = g_targetCurrentLimitA;
   g_currentLimitA = limitA;
 
   if (anyPhase) {
@@ -613,12 +624,12 @@ void loop()
   else if (m.stateStable == "B") {
     // Araç bağlandı: PWM başlat
     nextPwmEnabled = true;
-    nextDuty = PWM_DUTY_32A;
+    nextDuty = amps_to_duty(g_targetCurrentLimitA);
   }
   else if (m.stateStable == "C" || m.stateStable == "D") {
     // Şarjda: PWM devam
     nextPwmEnabled = true;
-    nextDuty = PWM_DUTY_32A;
+    nextDuty = amps_to_duty(g_targetCurrentLimitA);
   }
 
   // Web arayuzundeki manuel START / STOP istegi burada ana kararin ustune yazilir.
@@ -628,7 +639,7 @@ void loop()
   } else if (g_chargeMode == 1) { // START
     if (m.stateStable == "B" || m.stateStable == "C" || m.stateStable == "D") {
       nextPwmEnabled = true;
-      nextDuty = PWM_DUTY_32A;
+      nextDuty = amps_to_duty(g_targetCurrentLimitA);
     }
   }
 

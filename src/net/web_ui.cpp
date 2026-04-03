@@ -42,6 +42,7 @@ extern float g_energyKWh;
 extern uint32_t g_chargeSeconds;
 extern int g_phaseCount;
 extern float g_currentLimitA;
+extern float g_targetCurrentLimitA;
 extern int g_chargeMode;
 extern uint32_t g_manualStopAlertUntilMs;
 extern uint32_t g_manualStopAutoResumeAtMs;
@@ -257,6 +258,22 @@ static void saveLocationSettings() {
   if (!s_resetPrefsReady) return;
   s_resetPrefs.putDouble("mapLat", s_mapLat);
   s_resetPrefs.putDouble("mapLng", s_mapLng);
+}
+
+static void loadCurrentLimitSetting() {
+  if (s_resetPrefsReady) {
+    float stored = s_resetPrefs.getFloat("limitA", 32.0f);
+    if (stored < 6.0f) stored = 6.0f;
+    if (stored > 32.0f) stored = 32.0f;
+    g_targetCurrentLimitA = stored;
+  } else {
+    g_targetCurrentLimitA = 32.0f;
+  }
+}
+
+static void saveCurrentLimitSetting() {
+  if (!s_resetPrefsReady) return;
+  s_resetPrefs.putFloat("limitA", g_targetCurrentLimitA);
 }
 
 static void refreshDeviceIdentity() {
@@ -1484,6 +1501,7 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
     <div class="kv"><div class="k">Role acma (ms)</div><div class="v"><input id="onD" onfocus="p()" onblur="r()"></div></div>
     <div class="kv"><div class="k">Role birakma (ms)</div><div class="v"><input id="offD" onfocus="p()" onblur="r()"></div></div>
     <div class="kv"><div class="k">Stable count</div><div class="v"><input id="stb" onfocus="p()" onblur="r()"></div></div>
+    <div class="kv"><div class="k">Akim limiti (A)</div><div class="v"><input id="limitASet" min="6" max="32" step="1" onfocus="p()" onblur="r()"></div></div>
 
     <div class="sep"></div>
     <h2>CP KALIBRASYON</h2>
@@ -1723,6 +1741,7 @@ function pull(force=false){
     setInput('onD', d.onD, force);
     setInput('offD', d.offD, force);
     setInput('stb', d.stable, force);
+    setInput('limitASet', d.limitA, force);
     setInput('div', d.div, force);
     setInput('thb', d.thb, force);
     setInput('thc', d.thc, force);
@@ -1748,6 +1767,7 @@ function applyCal(){
   q.append('onD', document.getElementById('onD').value);
   q.append('offD', document.getElementById('offD').value);
   q.append('s', document.getElementById('stb').value);
+  q.append('limitA', document.getElementById('limitASet').value);
   q.append('div', document.getElementById('div').value);
   q.append('thb', document.getElementById('thb').value);
   q.append('thc', document.getElementById('thc').value);
@@ -2318,6 +2338,10 @@ static void handleCalibApply() {
   if (server.hasArg("s")) {
     stableCount = clampIntArg(server.arg("s"), 1, 50);
   }
+  if (server.hasArg("limitA")) {
+    g_targetCurrentLimitA = clampFloatArg(server.arg("limitA"), 6.0f, 32.0f, g_targetCurrentLimitA);
+    saveCurrentLimitSetting();
+  }
   if (server.hasArg("div")) {
     CP_DIVIDER_RATIO = clampFloatArg(server.arg("div"), 0.1f, 20.0f, CP_DIVIDER_RATIO);
   }
@@ -2426,6 +2450,7 @@ void web_init() {
   } else {
     Serial.println("[RST] NVS init fail");
   }
+  loadCurrentLimitSetting();
   loadLocationSettings();
   pinMode(MOSFET_RESET_PIN, OUTPUT);
   pinMode(MOSFET_SET_PIN, OUTPUT);
