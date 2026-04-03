@@ -19,6 +19,7 @@ void loop();
 
 // Manuel tetikleme (ornek: web komutundan). Wi-Fi bagli ise hemen kontrol eder.
 void triggerCheckNow();
+void triggerInstallNow();
 void deferPeriodicChecks(uint32_t ms);
 bool selectFactoryBootPartition();
 bool selectAlternateOtaBootPartition();

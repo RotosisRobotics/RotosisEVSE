@@ -1600,10 +1600,11 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
     <div class="btns" style="margin-top:10px">
       <button class="primary" onclick="window.location='/update'">BIN YUKLE</button>
       <button class="primary" onclick="runOtaCheckAdmin()">OTA KONTROL ET</button>
+      <button class="primary" id="otaInstallBtn" onclick="runOtaInstall()" disabled>GUNCELLEMEYI YUKLE</button>
       <button onclick="runBootPrev()">ONCEKI OTA'YA DON</button>
       <button class="danger" onclick="runBootFactory()">FACTORY'E DON</button>
     </div>
-    <div class="small">Not: `Onceki OTA'ya don` aktif olmayan OTA slotunu dener. Onceki surum oradaysa geri donersin. `Factory'e don` ise USB ile yukledigin kurtarma surumunu acar.</div>
+    <div class="small">Not: OTA kontrolu yeni surumu sadece tespit eder. Yukleme icin ayrica onay vermen gerekir. `Onceki OTA'ya don` aktif olmayan OTA slotunu dener. Onceki surum oradaysa geri donersin. `Factory'e don` ise USB ile yukledigin kurtarma surumunu acar.</div>
   </div>
 </div>
 
@@ -1635,10 +1636,45 @@ function fmtOtaAge(ms){
   const rem = sec % 60;
   return min + " dk " + rem + " sn once";
 }
+function compareVersions(a,b){
+  const pa=String(a||"").split(".").map(x=>parseInt(x,10)||0);
+  const pb=String(b||"").split(".").map(x=>parseInt(x,10)||0);
+  const len=Math.max(pa.length,pb.length,4);
+  for(let i=0;i<len;i++){
+    const av=pa[i]||0;
+    const bv=pb[i]||0;
+    if(av>bv) return 1;
+    if(av<bv) return -1;
+  }
+  return 0;
+}
+function updateOtaInstallButton(d){
+  const btn=document.getElementById('otaInstallBtn');
+  if(!btn) return;
+  const hasUpdate=compareVersions(d.otaRemote,d.otaCur)>0;
+  btn.disabled=!hasUpdate;
+  btn.textContent=hasUpdate?'GUNCELLEMEYI YUKLE':'GUNCEL';
+}
 function runOtaCheckAdmin(){
   fetch('/ota_check', {cache:'no-store'}).then(() => {
     document.getElementById('otaStatus').textContent = 'check_requested';
   });
+}
+function runOtaInstall(){
+  const cur=document.getElementById('otaCurVer').textContent||'-';
+  const remote=document.getElementById('otaRemoteVer').textContent||'-';
+  if(compareVersions(remote,cur)<=0){
+    alert('Yuklenecek yeni OTA surumu bulunmuyor.');
+    return;
+  }
+  if(!confirm('Yeni OTA surumu yüklensin ve cihaz yeniden başlatılsın mı?')) return;
+  fetch('/ota_install', {cache:'no-store'})
+    .then(r => r.json())
+    .then(() => {
+      document.getElementById('otaStatus').textContent='install_requested';
+      document.getElementById('otaError').textContent='Admin onayi verildi, OTA yukleme baslatiliyor';
+    })
+    .catch(() => alert('OTA yukleme istegi gonderilemedi'));
 }
 function runBootFactory(){
   if(!confirm('Factory surume donup cihaz yeniden baslatilsin mi?')) return;
@@ -1727,6 +1763,7 @@ function pull(force=false){
     document.getElementById('otaStatus').textContent = d.otaStatus || '-';
     document.getElementById('otaAge').textContent = fmtOtaAge(d.otaAgeMs);
     document.getElementById('otaError').textContent = (d.otaErr && d.otaErr.length) ? d.otaErr : 'Hata yok';
+    updateOtaInstallButton(d);
     document.getElementById('badgeState').textContent = 'STATE:' + (d.state || '-');
     const relayBadge = document.getElementById('badgeRelay');
     relayBadge.textContent = 'R: ' + (d.rLbl || '-');
@@ -1881,6 +1918,14 @@ static void handleAppIcon() { noteWebActivity(); noteHttpResponseSent(); server.
 static void handleOtaCheck() {
   noteWebActivity();
   OTA_Manager::triggerCheckNow();
+  noteHttpResponseSent();
+  server.send(200, "application/json", "{\"ok\":1}");
+}
+
+static void handleOtaInstall() {
+  noteWebActivity();
+  if (!requireAdminAuth()) return;
+  OTA_Manager::triggerInstallNow();
   noteHttpResponseSent();
   server.send(200, "application/json", "{\"ok\":1}");
 }
@@ -2467,6 +2512,7 @@ void web_init() {
   server.on("/sw.js", HTTP_GET, handleServiceWorker);
   server.on("/app-icon.svg", HTTP_GET, handleAppIcon);
   server.on("/ota_check", HTTP_GET, handleOtaCheck);
+  server.on("/ota_install", HTTP_GET, handleOtaInstall);
   server.on("/boot_factory", HTTP_GET, handleBootFactory);
   server.on("/boot_prev", HTTP_GET, handleBootPrev);
   // Captive portal probe endpoints (Android/iOS/Windows)

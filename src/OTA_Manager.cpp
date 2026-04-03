@@ -22,6 +22,7 @@ struct OtaContext {
   uint32_t lastCheckMs = 0;
   uint32_t deferUntilMs = 0;
   bool checkRequested = false;
+  bool installRequested = false;
   bool lastUpdateOk = false;
   bool pendingVerify = false;
   bool builtinPendingVerify = false;
@@ -584,6 +585,12 @@ static void handleUpdateCheck() {
   if (cmp > 0) {
     ctx.lastStatus = "update_available";
     Serial.printf("[OTA] Yeni surum bulunuyor -> %s\n", m.url.c_str());
+    if (!ctx.installRequested) {
+      ctx.lastUpdateOk = true;
+      ctx.lastError = "Admin onayi bekleniyor";
+      return;
+    }
+    ctx.installRequested = false;
     if (!precheckFirmware(m)) {
       ctx.lastUpdateOk = false;
       noteFailure("precheck_failed");
@@ -594,6 +601,7 @@ static void handleUpdateCheck() {
       noteFailure("update_failed");
     }
   } else {
+    ctx.installRequested = false;
     ctx.lastStatus = "up_to_date";
     Serial.println("[OTA] Cihaz guncel");
     ctx.lastUpdateOk = true;
@@ -672,6 +680,7 @@ void begin(const char* manifestUrl, uint32_t checkIntervalMs, const char* sha1Fi
   ctx.lastCheckMs = ctx.bootMs;
   ctx.deferUntilMs = (checkIntervalMs > 0) ? (ctx.bootMs + checkIntervalMs) : 0;
   ctx.checkRequested = false;
+  ctx.installRequested = false;
   ctx.lastUpdateOk = false;
   ctx.markedValid = false;
   ctx.verifyHeartbeatResolved = false;
@@ -707,6 +716,11 @@ void loop() {
 }
 
 void triggerCheckNow() {
+  ctx.checkRequested = true;
+}
+
+void triggerInstallNow() {
+  ctx.installRequested = true;
   ctx.checkRequested = true;
 }
 
