@@ -15,6 +15,7 @@
 #include "app_config.h"
 #include "app_pins.h"
 #include "OTA_Manager.h"
+#include "vehicle_top_art_svg.h"
 #include "pilot/pilot.h"
 #include "io/relay.h"
 
@@ -822,6 +823,8 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 .stationFocusLabel{padding:8px 12px;border-radius:999px;background:linear-gradient(180deg,rgba(13,31,45,.34),rgba(8,21,34,.16));border:1px solid rgba(166,255,194,.12);box-shadow:0 12px 20px rgba(2,10,18,.12);backdrop-filter:blur(14px);font-size:15px;font-weight:900;letter-spacing:-.02em;color:#f3fff7;white-space:nowrap}
 .metricCard{max-width:338px;margin:20px auto 0;padding:20px 22px;border-radius:26px;background:linear-gradient(180deg,rgba(10,28,43,.82),rgba(7,19,31,.62));border:1px solid rgba(151,210,255,.14);box-shadow:0 24px 40px rgba(2,10,18,.28);backdrop-filter:blur(20px);animation:fadeLift 1s .26s both;}
 .metricCard--stats{max-width:338px}
+.metricCardArt{display:flex;justify-content:center;align-items:center;margin:0 0 14px;padding:6px 0 2px;color:rgba(208,237,255,.92)}
+.metricCardArt img{display:block;width:min(78%,228px);height:auto;opacity:.95;filter:drop-shadow(0 12px 24px rgba(4,16,28,.22))}
 .metricCardDate{margin:2px 0 14px;padding:11px 14px;border-radius:18px;text-align:center;font-size:16px;font-weight:800;letter-spacing:-.02em;color:#d5f0ff;background:linear-gradient(180deg,rgba(12,32,50,.68),rgba(7,19,31,.48));border:1px solid rgba(151,210,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
 .metricLabel{font-size:17px;color:#91cbb9;font-weight:700;}
 .metricHero{margin-top:10px;font-size:46px;line-height:1;font-weight:800;letter-spacing:-.04em;color:#f1fffb;}
@@ -842,8 +845,8 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 @keyframes floatGlowA{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(22px,18px,0) scale(1.08)}}
 @keyframes floatGlowB{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-18px,-14px,0) scale(1.1)}}
 @keyframes livePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.22)}}
-@media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.mapPanel{inset:62px 0 0}.mapTop{top:14px;left:12px;right:12px;align-items:flex-start}.mapStationBadge{max-width:228px}.mapAction{padding:9px 13px}.stationFocus{margin:14px auto 14px;gap:8px}.stationFocusMark{width:88px;height:88px}.stationFocusLabel{font-size:14px;padding:8px 11px}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}}
-@media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.mapTop{gap:8px}.mapStationBadge{max-width:196px;padding:7px 12px 7px 7px}.mapStationGlyph{width:30px;height:30px}.mapStationGlyph svg{width:15px;height:15px}.mapTitle{font-size:15px}.mapPanel{inset:58px 0 0}.stationFocus{margin:12px auto 12px;gap:7px}.stationFocusMark{width:74px;height:74px}.stationFocusPin{width:26px;height:26px}.stationFocusPin svg{width:12px;height:12px}.stationFocusHint{font-size:10px}.stationFocusLabel{font-size:13px;padding:7px 9px}.metricCard{margin-top:16px;padding:16px 16px}.placeActions{flex-direction:column}}
+@media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.mapPanel{inset:62px 0 0}.mapTop{top:14px;left:12px;right:12px;align-items:flex-start}.mapStationBadge{max-width:228px}.mapAction{padding:9px 13px}.stationFocus{margin:14px auto 14px;gap:8px}.stationFocusMark{width:88px;height:88px}.stationFocusLabel{font-size:14px;padding:8px 11px}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}.metricCardArt img{width:min(74%,210px)}}
+@media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.mapTop{gap:8px}.mapStationBadge{max-width:196px;padding:7px 12px 7px 7px}.mapStationGlyph{width:30px;height:30px}.mapStationGlyph svg{width:15px;height:15px}.mapTitle{font-size:15px}.mapPanel{inset:58px 0 0}.stationFocus{margin:12px auto 12px;gap:7px}.stationFocusMark{width:74px;height:74px}.stationFocusPin{width:26px;height:26px}.stationFocusPin svg{width:12px;height:12px}.stationFocusHint{font-size:10px}.stationFocusLabel{font-size:13px;padding:7px 9px}.metricCard{margin-top:16px;padding:16px 16px}.metricCardArt{margin-bottom:12px}.metricCardArt img{width:min(72%,190px)}.placeActions{flex-direction:column}}
 </style>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a1d2f">
@@ -866,6 +869,9 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
   </div>
 
   <section class="metricCard metricCard--stats">
+    <div class="metricCardArt" aria-hidden="true">
+      <img src="/vehicle-top-art.svg" alt="">
+    </div>
     <div class="metricCardDate" id="dateLabel">-</div>
     <div class="metricsGrid">
       <div class="metricCell metricCell--power">
@@ -2177,6 +2183,7 @@ static void handlePing() { noteWebActivity(); noteHttpResponseSent(); server.sen
 static void handleManifest() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "application/manifest+json", MANIFEST_JSON); }
 static void handleServiceWorker() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "application/javascript", SERVICE_WORKER_JS); }
 static void handleAppIcon() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "image/svg+xml", APP_ICON_SVG); }
+static void handleVehicleTopArt() { noteWebActivity(); noteHttpResponseSent(); server.send_P(200, "image/svg+xml", VEHICLE_TOP_ART_SVG); }
 static void handleOtaCheck() {
   noteWebActivity();
   OTA_Manager::triggerCheckNow();
@@ -2888,6 +2895,7 @@ void web_init() {
   server.on("/manifest.json", HTTP_GET, handleManifest);
   server.on("/sw.js", HTTP_GET, handleServiceWorker);
   server.on("/app-icon.svg", HTTP_GET, handleAppIcon);
+  server.on("/vehicle-top-art.svg", HTTP_GET, handleVehicleTopArt);
   server.on("/ota_check", HTTP_GET, handleOtaCheck);
   server.on("/ota_install", HTTP_GET, handleOtaInstall);
   server.on("/wifi_scan", HTTP_GET, handleWifiScan);
