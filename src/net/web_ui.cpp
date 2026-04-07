@@ -811,12 +811,6 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 .dateLine{font-size:19px;font-weight:700;letter-spacing:.01em;color:#bde9ff;}
 .locationLine{margin-top:8px;font-size:18px;line-height:1.35;font-weight:700;color:#f1fffb;}
 .hintLine{margin-top:6px;font-size:14px;color:#84c8b5;}
-.carStage{max-width:332px;margin:20px auto 6px;padding:10px 10px 0;border-radius:32px;background:linear-gradient(180deg,rgba(10,28,42,.72),rgba(6,16,26,.34));border:1px solid rgba(143,205,255,.16);box-shadow:0 22px 40px rgba(2,10,18,.28);backdrop-filter:blur(15px);animation:fadeLift .94s .16s both;}
-.carWrap{position:relative;max-width:352px;min-height:150px;margin:0 auto -18px;display:flex;align-items:center;justify-content:center;isolation:isolate;transform:translateY(-16px);}
-.carWrap::before{content:"";position:absolute;inset:13% 5% 15%;border-radius:34px;background:linear-gradient(180deg,rgba(18,43,62,.74),rgba(7,20,31,.28));border:1px solid rgba(172,244,221,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(13px);z-index:0;}
-.carWrap::after{content:"";position:absolute;left:14%;right:14%;bottom:10%;height:58px;border-radius:999px;background:radial-gradient(ellipse at center, rgba(42,221,169,.18) 0%, rgba(42,221,169,.09) 30%, rgba(6,16,26,0) 74%),radial-gradient(ellipse at center, rgba(4,12,20,.5) 0%, rgba(4,12,20,.2) 42%, rgba(4,12,20,0) 76%);filter:blur(8px);z-index:1;animation:platformPulse 6.5s ease-in-out infinite;}
-.carSvg{position:relative;z-index:4;width:112%;max-width:372px;height:auto;display:block;transform:translateY(8px);filter:drop-shadow(0 22px 24px rgba(1,9,16,.30));animation:carFloat 7s ease-in-out infinite}
-.flow{animation:flow 2s linear infinite}
 .stationFocus{position:relative;z-index:4;width:max-content;max-width:100%;margin:18px auto 16px;display:grid;justify-items:center;gap:10px;pointer-events:none;animation:fadeLift .96s .22s both;}
 .stationFocusMark{position:relative;width:102px;height:102px;display:grid;place-items:center;}
 .stationFocusHalo{position:absolute;inset:0;border-radius:999px;background:radial-gradient(circle,rgba(118,255,142,.30) 0%,rgba(118,255,142,.18) 34%,rgba(118,255,142,.08) 52%,rgba(118,255,142,0) 76%);}
@@ -847,12 +841,9 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 @keyframes fadeLift{0%{opacity:0;transform:translateY(14px)}100%{opacity:1;transform:translateY(0)}}
 @keyframes floatGlowA{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(22px,18px,0) scale(1.08)}}
 @keyframes floatGlowB{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-18px,-14px,0) scale(1.1)}}
-@keyframes carFloat{0%,100%{transform:translate(-5px,-2px)}50%{transform:translate(-5px,-7px)}}
-@keyframes flow{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-@keyframes platformPulse{0%,100%{opacity:.78;transform:scaleX(.96)}50%{opacity:1;transform:scaleX(1.02)}}
 @keyframes livePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.22)}}
-@media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.mapPanel{inset:62px 0 0}.mapTop{top:14px;left:12px;right:12px;align-items:flex-start}.mapStationBadge{max-width:228px}.mapAction{padding:9px 13px}.carStage{max-width:304px;margin-top:16px}.carWrap{max-width:332px;min-height:144px;margin-bottom:-14px;transform:translateY(-12px)}.carSvg{max-width:346px;transform:translateY(6px)}.stationFocus{margin:14px auto 14px;gap:8px}.stationFocusMark{width:88px;height:88px}.stationFocusLabel{font-size:14px;padding:8px 11px}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}}
-@media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.mapTop{gap:8px}.mapStationBadge{max-width:196px;padding:7px 12px 7px 7px}.mapStationGlyph{width:30px;height:30px}.mapStationGlyph svg{width:15px;height:15px}.mapTitle{font-size:15px}.mapPanel{inset:58px 0 0}.carStage{max-width:284px;margin-top:12px;padding:8px 8px 0}.carWrap{max-width:312px;min-height:134px;margin-bottom:-10px;transform:translateY(-8px)}.carSvg{max-width:324px;transform:translateY(4px)}.stationFocus{margin:12px auto 12px;gap:7px}.stationFocusMark{width:74px;height:74px}.stationFocusPin{width:26px;height:26px}.stationFocusPin svg{width:12px;height:12px}.stationFocusHint{font-size:10px}.stationFocusLabel{font-size:13px;padding:7px 9px}.metricCard{margin-top:16px;padding:16px 16px}.placeActions{flex-direction:column}}
+@media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.mapPanel{inset:62px 0 0}.mapTop{top:14px;left:12px;right:12px;align-items:flex-start}.mapStationBadge{max-width:228px}.mapAction{padding:9px 13px}.stationFocus{margin:14px auto 14px;gap:8px}.stationFocusMark{width:88px;height:88px}.stationFocusLabel{font-size:14px;padding:8px 11px}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}}
+@media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.mapTop{gap:8px}.mapStationBadge{max-width:196px;padding:7px 12px 7px 7px}.mapStationGlyph{width:30px;height:30px}.mapStationGlyph svg{width:15px;height:15px}.mapTitle{font-size:15px}.mapPanel{inset:58px 0 0}.stationFocus{margin:12px auto 12px;gap:7px}.stationFocusMark{width:74px;height:74px}.stationFocusPin{width:26px;height:26px}.stationFocusPin svg{width:12px;height:12px}.stationFocusHint{font-size:10px}.stationFocusLabel{font-size:13px;padding:7px 9px}.metricCard{margin-top:16px;padding:16px 16px}.placeActions{flex-direction:column}}
 </style>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a1d2f">
@@ -873,28 +864,6 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
     </div>
     <div class="sync" id="sync">WAIT</div>
   </div>
-
-  <section class="carStage">
-    <div class="carWrap">
-      <svg class="carSvg" viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg" aria-label="Car" role="img">
-        <defs>
-          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#00FFAA"/>
-            <stop offset="50%" stop-color="#00E5FF"/>
-            <stop offset="100%" stop-color="#00FFAA"/>
-          </linearGradient>
-          <clipPath id="clip">
-            <path d="M98.5 186.5C105.7 161.7 128.167 145.833 138.5 141L147.5 113.5L214.5 111.5L259.5 36H443.5C470.7 38 479.5 54.1667 480.5 62L504 72.5L504.5 101.5L526.5 111V172.5L495.5 187L98.5 186.5Z"/>
-          </clipPath>
-        </defs>
-        <path d="M94 188C97 179 102 170 110 161C124 146 142 139 161 137H487L512 148V174L495 187L94 188Z" fill="#7D7E7D"/>
-        <path d="M138 188C153 186 170 185 192 185H455C471 185 485 186 495 188L489 196H144L138 188Z" fill="#7D7D7D"/>
-        <g clip-path="url(#clip)">
-          <rect class="flow" x="-600" y="0" width="1200" height="300" fill="url(#grad)"/>
-        </g>
-      </svg>
-    </div>
-  </section>
 
   <section class="metricCard metricCard--stats">
     <div class="metricCardDate" id="dateLabel">-</div>
@@ -970,7 +939,6 @@ const mapUi={
   focusPin:document.getElementById("stationFocusDot"),
   focus:document.getElementById("stationFocus"),
   app:document.querySelector(".app"),
-  carStage:document.querySelector(".carStage"),
   statsCard:document.querySelector(".metricCard--stats")
 };
 const placeKinds={
@@ -1325,7 +1293,7 @@ if(window.visualViewport&&window.visualViewport.addEventListener){
 }
 if(typeof ResizeObserver!=="undefined"){
   const focusObserver=new ResizeObserver(()=>refreshStationFocus());
-  [mapUi.app,mapUi.carStage,mapUi.statsCard,mapUi.focus].forEach((el)=>{
+  [mapUi.app,mapUi.statsCard,mapUi.focus].forEach((el)=>{
     if(el) focusObserver.observe(el);
   });
 }
