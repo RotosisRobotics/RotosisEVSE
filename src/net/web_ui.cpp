@@ -782,6 +782,14 @@ box-shadow:0 0 18px rgba(122,246,211,.42),0 0 34px rgba(122,246,211,.22);opacity
 .vehicleStage.is-charging .chargeAura{opacity:var(--chargeOpacity,.72);transform:scale(1.04)}
 .vehicleStage.is-charging .chargeBeam,.vehicleStage.is-charging .chargePulse,.vehicleStage.is-charging .chargeSpark{animation-play-state:running}
 .vehicleStage.is-charging .chargeBeam{opacity:calc(.16 + (var(--chargeOpacity,.72)*.7))}
+body.state-B .vehicleStage .chargeAura{background:radial-gradient(circle at 50% 50%,rgba(255,214,107,.24) 0%,rgba(255,214,107,.11) 34%,rgba(255,214,107,0) 72%)}
+body.state-B .vehicleStage .chargeBeam{background:linear-gradient(180deg,rgba(255,214,107,0) 0%,rgba(255,214,107,.12) 14%,rgba(255,249,220,.92) 34%,rgba(255,214,107,.18) 56%,rgba(255,214,107,0) 100%)}
+body.state-B .vehicleStage .chargePulse{background:radial-gradient(circle,rgba(255,252,241,.98) 0%,rgba(255,214,107,.84) 38%,rgba(255,214,107,.08) 72%,rgba(255,214,107,0) 100%);box-shadow:0 0 18px rgba(255,214,107,.4),0 0 34px rgba(255,214,107,.2)}
+body.state-B .vehicleStage .chargeSpark svg{fill:#fff5cb}
+body.state-C .vehicleStage .chargeAura,body.state-D .vehicleStage .chargeAura{background:radial-gradient(circle at 50% 50%,rgba(118,205,255,.26) 0%,rgba(118,205,255,.12) 34%,rgba(118,205,255,0) 72%)}
+body.state-C .vehicleStage .chargeBeam,body.state-D .vehicleStage .chargeBeam{background:linear-gradient(180deg,rgba(118,205,255,0) 0%,rgba(118,205,255,.14) 14%,rgba(236,249,255,.94) 34%,rgba(118,205,255,.18) 56%,rgba(118,205,255,0) 100%)}
+body.state-C .vehicleStage .chargePulse,body.state-D .vehicleStage .chargePulse{background:radial-gradient(circle,rgba(245,252,255,.98) 0%,rgba(118,205,255,.84) 38%,rgba(118,205,255,.08) 72%,rgba(118,205,255,0) 100%);box-shadow:0 0 18px rgba(118,205,255,.42),0 0 34px rgba(118,205,255,.22)}
+body.state-C .vehicleStage .chargeSpark svg,body.state-D .vehicleStage .chargeSpark svg{fill:#ddf4ff}
 body.state-E .vehicleStage .chargeAura,body.state-F .vehicleStage .chargeAura{background:radial-gradient(circle at 50% 50%,rgba(255,151,151,.22) 0%,rgba(255,151,151,.10) 34%,rgba(255,151,151,0) 72%)}
 body.state-E .vehicleStage .chargeBeam,body.state-F .vehicleStage .chargeBeam{background:linear-gradient(180deg,rgba(255,140,140,0) 0%,rgba(255,140,140,.14) 14%,rgba(255,238,238,.92) 34%,rgba(255,140,140,.16) 56%,rgba(255,140,140,0) 100%)}
 body.state-E .vehicleStage .chargePulse,body.state-F .vehicleStage .chargePulse{background:radial-gradient(circle,rgba(255,248,248,.98) 0%,rgba(255,150,150,.82) 38%,rgba(255,120,120,.08) 72%,rgba(255,120,120,0) 100%);box-shadow:0 0 18px rgba(255,142,142,.38),0 0 34px rgba(255,142,142,.2)}
@@ -961,11 +969,12 @@ function setSync(ok){
 function setChargingVisual(state,powerKw,currentA){
   if(!vehicleStage) return;
   const waiting=state==="A";
-  const active=waiting || ((state==="C"||state==="D") && ((Number(powerKw)||0)>0.08 || (Number(currentA)||0)>0.6));
+  const charging=(state==="C"||state==="D");
+  const active=waiting || charging;
   vehicleStage.classList.toggle("is-charging",active);
   const intensity=waiting
     ? .34
-    : active
+    : charging
       ? clamp(Math.max((Number(powerKw)||0)/11,(Number(currentA)||0)/32,.28),.28,1)
       : .16;
   const speed=(waiting?2.85:(2.9-(intensity*1.35))).toFixed(2)+"s";
