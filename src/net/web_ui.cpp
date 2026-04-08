@@ -742,58 +742,6 @@ body.state-C,body.state-D{--accent:#37d8a2;--accentDeep:#15b987;--accentSoft:rgb
 body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgba(255,139,139,.18)}
 .screenShell{position:relative;z-index:1;max-width:420px;margin:0 auto;padding:14px 12px 22px;}
 .app{position:relative;z-index:1;max-width:396px;min-height:calc(100vh - 44px);margin:0 auto;padding:0 0 18px;animation:screenEnter .82s cubic-bezier(.22,1,.36,1);}
-.app > :not(.mapPanel){position:relative;z-index:2}
-.mapPanel{position:absolute;inset:64px 0 0;z-index:0;margin:0;padding:0;background:transparent;border:none;box-shadow:none;animation:fadeLift .98s .2s both;}
-.mapTop{position:absolute;top:18px;left:14px;right:14px;z-index:380;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:0;}
-.mapStationBadge{display:inline-flex;align-items:center;gap:10px;max-width:250px;padding:8px 14px 8px 8px;border-radius:999px;background:linear-gradient(135deg,rgba(109,205,137,.84),rgba(58,139,85,.76));border:1px solid rgba(240,255,244,.28);box-shadow:0 16px 26px rgba(5,18,12,.16);backdrop-filter:blur(16px);}
-.mapStationGlyph{width:34px;height:34px;border-radius:999px;display:grid;place-items:center;background:linear-gradient(135deg,#f8fff7,#8cf0a8);color:#10331d;box-shadow:0 6px 14px rgba(18,69,36,.18)}
-.mapStationGlyph svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-.mapStationInfo{min-width:0}
-.mapEyebrow{display:none}
-.mapTitle{margin:0;font-size:17px;line-height:1.02;letter-spacing:-.03em;color:#f8fffb;white-space:nowrap}
-.mapSub{display:none}
-.mapAction{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 15px;border-radius:999px;border:1px solid rgba(178,212,255,.14);background:linear-gradient(135deg,rgba(14,32,48,.52),rgba(8,21,34,.34));backdrop-filter:blur(12px);color:#eef8ff;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap;box-shadow:0 12px 22px rgba(2,10,18,.18);}
-.mapAction.secondary{background:rgba(10,28,42,.46);color:#bfe8db}
-.mapAction:hover{transform:translateY(-1px);box-shadow:0 16px 28px rgba(2,10,18,.34)}
-.mapMetaRow{display:grid;grid-template-columns:1.45fr .8fr .75fr;gap:8px}
-.mapMeta{padding:10px 11px;border-radius:18px;background:linear-gradient(180deg,rgba(10,28,42,.78),rgba(7,19,31,.58));border:1px solid rgba(87,215,175,.12);box-shadow:var(--shadowSoft)}
-.mapMetaLabel{font-size:11px;font-weight:700;color:#8db8ad}
-.mapMetaValue{margin-top:6px;font-size:15px;font-weight:800;letter-spacing:-.03em;color:#f1fffb}
-.mapMetaValue.mono{font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,"Courier New",monospace}
-.mapCanvas{position:absolute;inset:0;min-height:auto;height:100%;border-radius:34px;overflow:hidden;border:1px solid rgba(103,167,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 18px 36px rgba(2,10,18,.30);background:linear-gradient(180deg,rgba(8,24,37,.28),rgba(4,12,21,.58));}
-.mapCanvas::before{content:"";position:absolute;left:0;right:0;top:0;height:180px;background:linear-gradient(180deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.08) 40%,rgba(255,255,255,0) 100%);pointer-events:none;z-index:330}
-.mapCanvas::after{content:"";position:absolute;left:0;right:0;bottom:0;height:144px;background:linear-gradient(180deg,rgba(8,18,29,0),rgba(8,18,29,.08) 48%,rgba(8,18,29,.18) 100%);pointer-events:none;z-index:320}
-.mapFallback{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:#dffcf3;font-size:15px;font-weight:700;background:linear-gradient(180deg,rgba(8,24,37,.68),rgba(4,12,21,.86));z-index:600}
-.mapFallback.hidden{display:none}
-.mapCanvas .leaflet-control-attribution,.mapCanvas .leaflet-control-zoom{border:none!important;box-shadow:0 12px 24px rgba(2,10,18,.28)!important}
-.mapCanvas .leaflet-control-zoom a{background:rgba(10,29,41,.94)!important;color:#eafcf6!important;border:none!important}
-.mapCanvas .leaflet-control-attribution{background:rgba(8,20,31,.84)!important;color:#a8d0c4!important}
-.mapCanvas .leaflet-control-attribution a{color:#ddfff3!important}
-.leaflet-tile-pane{filter:saturate(1.04) brightness(1.09) contrast(1.08)}
-.mapMarkerShell{background:transparent;border:none}
-.mapMarker{width:28px;height:28px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:900;color:#02110a;background:var(--pin,#37d8a2);border:2px solid rgba(255,255,255,.92);box-shadow:0 10px 18px rgba(2,10,18,.34)}
-.mapMarker.station{width:42px;height:42px;color:#072113;background:radial-gradient(circle at 35% 30%,#ffffff 0%,#dffff0 22%,#45dda0 56%,#149a70 100%);border:3px solid rgba(255,255,255,.96);box-shadow:0 16px 28px rgba(2,10,18,.34),0 0 0 7px rgba(55,216,162,.14)}
-.mapMarkerIcon{display:grid;place-items:center}
-.mapMarkerIcon svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-.mapLegend{display:flex;flex-wrap:wrap;gap:6px}
-.mapChip{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;border:1px solid rgba(87,215,175,.14);background:rgba(10,28,42,.52);color:#dffcf3;font-size:11px;font-weight:800;cursor:pointer;transition:all .18s ease}
-.mapChip:hover{transform:translateY(-1px);border-color:rgba(87,215,175,.26)}
-.mapChip.active{background:rgba(55,216,162,.18);border-color:rgba(55,216,162,.3);color:#f1fffb}
-.mapChipDot{width:10px;height:10px;border-radius:999px;background:var(--dot,#37d8a2);box-shadow:0 0 0 4px color-mix(in srgb,var(--dot,#37d8a2) 18%, transparent)}
-.placesHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:2px}
-.placesTitle{font-size:14px;font-weight:800;color:#f1fffb}
-.placesStatus{font-size:11px;color:#8db8ad}
-.placesList{display:grid;grid-template-columns:1fr;gap:10px}
-.placeCard{padding:12px;border-radius:18px;background:linear-gradient(180deg,rgba(10,28,42,.78),rgba(7,19,31,.58));border:1px solid rgba(87,215,175,.12);box-shadow:var(--shadowSoft)}
-.placeTop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.placeName{font-size:14px;font-weight:800;line-height:1.28;color:#f1fffb}
-.placeTag{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.04);font-size:10px;font-weight:800;color:#dffcf3;white-space:nowrap}
-.placeDot{width:9px;height:9px;border-radius:999px;background:var(--dot,#37d8a2)}
-.placeMeta{margin-top:8px;display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#93c8bb}
-.placeActions{margin-top:10px;display:flex;gap:8px}
-.placeBtn{flex:1;display:inline-flex;align-items:center;justify-content:center;padding:8px 10px;border-radius:12px;border:1px solid rgba(87,215,175,.14);background:rgba(10,28,42,.58);color:#dffcf3;text-decoration:none;font-size:11px;font-weight:800}
-.placeBtn.primary{background:rgba(55,216,162,.16);border-color:rgba(55,216,162,.24)}
-.placeEmpty{padding:18px;border-radius:22px;border:1px dashed rgba(87,215,175,.18);background:rgba(8,20,31,.4);color:#9fcfc2;font-size:14px;line-height:1.5}
 .phaseMeta{margin-top:16px;display:flex;justify-content:space-between;gap:10px;font-size:14px;color:#8bb5a6;}
 .phaseMeta span{flex:1;padding:10px 12px;border-radius:16px;background:linear-gradient(180deg,rgba(12,32,50,.58),rgba(8,22,36,.38));border:1px solid rgba(151,210,255,.08);text-align:center}
 .topbar{display:grid;grid-template-columns:44px 1fr 52px;align-items:center;gap:10px;}
@@ -812,15 +760,6 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 .dateLine{font-size:19px;font-weight:700;letter-spacing:.01em;color:#bde9ff;}
 .locationLine{margin-top:8px;font-size:18px;line-height:1.35;font-weight:700;color:#f1fffb;}
 .hintLine{margin-top:6px;font-size:14px;color:#84c8b5;}
-.stationFocus{position:relative;z-index:4;width:max-content;max-width:100%;margin:18px auto 16px;display:grid;justify-items:center;gap:10px;pointer-events:none;animation:fadeLift .96s .22s both;}
-.stationFocusMark{position:relative;width:102px;height:102px;display:grid;place-items:center;}
-.stationFocusHalo{position:absolute;inset:0;border-radius:999px;background:radial-gradient(circle,rgba(118,255,142,.30) 0%,rgba(118,255,142,.18) 34%,rgba(118,255,142,.08) 52%,rgba(118,255,142,0) 76%);}
-.stationFocusPin{position:relative;width:30px;height:30px;border-radius:999px;display:grid;place-items:center;background:linear-gradient(135deg,#f7fff8,#5ce482);border:3px solid rgba(246,255,251,.96);box-shadow:0 14px 24px rgba(2,10,18,.20),0 0 0 10px rgba(118,255,142,.10);}
-.stationFocusPin::after{display:none}
-.stationFocusPin svg{width:14px;height:14px;stroke:#0d4322;fill:none;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}
-.stationFocusCopy{display:grid;justify-items:center;gap:4px}
-.stationFocusHint{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#88f0a6;text-shadow:0 2px 8px rgba(4,14,8,.14)}
-.stationFocusLabel{padding:8px 12px;border-radius:999px;background:linear-gradient(180deg,rgba(13,31,45,.34),rgba(8,21,34,.16));border:1px solid rgba(166,255,194,.12);box-shadow:0 12px 20px rgba(2,10,18,.12);backdrop-filter:blur(14px);font-size:15px;font-weight:900;letter-spacing:-.02em;color:#f3fff7;white-space:nowrap}
 .metricCard{max-width:338px;margin:20px auto 0;padding:20px 22px;border-radius:26px;background:linear-gradient(180deg,rgba(10,28,43,.82),rgba(7,19,31,.62));border:1px solid rgba(151,210,255,.14);box-shadow:0 24px 40px rgba(2,10,18,.28);backdrop-filter:blur(20px);animation:fadeLift 1s .26s both;}
 .metricCard--stats{max-width:338px}
 .metricCardArt{display:flex;justify-content:center;align-items:center;margin:0 0 14px;padding:6px 0 2px;color:rgba(208,237,255,.92)}
@@ -845,8 +784,8 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 @keyframes floatGlowA{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(22px,18px,0) scale(1.08)}}
 @keyframes floatGlowB{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-18px,-14px,0) scale(1.1)}}
 @keyframes livePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.22)}}
-@media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.mapPanel{inset:62px 0 0}.mapTop{top:14px;left:12px;right:12px;align-items:flex-start}.mapStationBadge{max-width:228px}.mapAction{padding:9px 13px}.stationFocus{margin:14px auto 14px;gap:8px}.stationFocusMark{width:88px;height:88px}.stationFocusLabel{font-size:14px;padding:8px 11px}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}.metricCardArt img{width:min(74%,210px)}}
-@media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.mapTop{gap:8px}.mapStationBadge{max-width:196px;padding:7px 12px 7px 7px}.mapStationGlyph{width:30px;height:30px}.mapStationGlyph svg{width:15px;height:15px}.mapTitle{font-size:15px}.mapPanel{inset:58px 0 0}.stationFocus{margin:12px auto 12px;gap:7px}.stationFocusMark{width:74px;height:74px}.stationFocusPin{width:26px;height:26px}.stationFocusPin svg{width:12px;height:12px}.stationFocusHint{font-size:10px}.stationFocusLabel{font-size:13px;padding:7px 9px}.metricCard{margin-top:16px;padding:16px 16px}.metricCardArt{margin-bottom:12px}.metricCardArt img{width:min(72%,190px)}.placeActions{flex-direction:column}}
+@media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}.metricCardArt img{width:min(74%,210px)}}
+@media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.metricCard{margin-top:16px;padding:16px 16px}.metricCardArt{margin-bottom:12px}.metricCardArt img{width:min(72%,190px)}}
 </style>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a1d2f">
@@ -922,52 +861,6 @@ const MAX_POINTS=40;
 let livePoints=[];
 let chartCeil=32;
 let currentChargeModeId=0;
-const STATION_NAME="Rotosis Robotlu Otomasyon";
-let STATION_DISPLAY="Istasyon";
-const STATION_SHORT="R";
-let STATION_ADDRESS="Fevzi Cakmak Mah. Sehit Ibrahim Betin Cd. No:4/F, Arli Sanayi Sitesi, Karatay / Konya";
-const MAP_FOCUS_ZOOM=16.1;
-const mapUi={
-  coords:document.getElementById("mapCoords"),
-  radius:document.getElementById("radiusText"),
-  count:document.getElementById("nearbyCount"),
-  list:document.getElementById("placesList"),
-  status:document.getElementById("placesStatus"),
-  chipRow:document.getElementById("chipRow"),
-  openBtn:document.getElementById("mapOpenBtn"),
-  routeBtn:document.getElementById("mapRouteBtn"),
-  refreshBtn:document.getElementById("mapRefreshBtn"),
-  fallback:document.getElementById("mapFallback"),
-  stationGlyph:document.getElementById("mapStationGlyph"),
-  stationName:document.getElementById("mapStationName"),
-  stationAddress:document.getElementById("mapStationAddress"),
-  stationFocusLabel:document.getElementById("stationFocusLabel"),
-  focusPin:document.getElementById("stationFocusDot"),
-  focus:document.getElementById("stationFocus"),
-  app:document.querySelector(".app"),
-  statsCard:document.querySelector(".metricCard--stats")
-};
-const placeKinds={
-  all:{label:"Tum",short:"T",color:"#7ad8ff"},
-  market:{label:"Market",short:"M",color:"#5fe19d"},
-  cafe:{label:"Kafe",short:"K",color:"#ffbf75"},
-  food:{label:"Yemek",short:"Y",color:"#ff8f8f"},
-  pharmacy:{label:"Eczane",short:"E",color:"#8fb4ff"},
-  fuel:{label:"Akaryakit",short:"A",color:"#ffd766"},
-  parking:{label:"Otopark",short:"P",color:"#c59cff"}
-};
-const mapState={
-  lat:null,
-  lng:null,
-  radius:700,
-  map:null,
-  stationMarker:null,
-  rangeCircle:null,
-  nearbyLayer:null,
-  allPlaces:[],
-  activeFilter:"all",
-  lastFetchKey:""
-};
 const stateMeta={
   A:{name:"Hazır",hint:"Araç bekleniyor"},
   B:{name:"Bağlı",hint:"Araç bağlandı"},
@@ -998,310 +891,6 @@ function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
 function setText(id,value){
   const el=document.getElementById(id);
   if(el) el.textContent=value;
-}
-function setMapFallback(text){
-  if(!mapUi.fallback) return;
-  mapUi.fallback.textContent=text;
-  mapUi.fallback.className=text?"mapFallback":"mapFallback hidden";
-}
-function fmtDistance(meters){
-  const m=Math.max(0,Math.round(Number(meters)||0));
-  if(m>=1000) return (m/1000).toFixed(2)+" km";
-  return m+" m";
-}
-function distanceMeters(lat1,lng1,lat2,lng2){
-  const R=6371000;
-  const toRad=(deg)=>deg*Math.PI/180;
-  const dLat=toRad(lat2-lat1);
-  const dLng=toRad(lng2-lng1);
-  const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
-  return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-}
-function placeKindFor(tags){
-  const amenity=String((tags&&tags.amenity)||"").toLowerCase();
-  const shop=String((tags&&tags.shop)||"").toLowerCase();
-  if(amenity==="pharmacy") return "pharmacy";
-  if(amenity==="fuel") return "fuel";
-  if(amenity==="parking") return "parking";
-  if(amenity==="cafe") return "cafe";
-  if(amenity==="restaurant"||amenity==="fast_food"||amenity==="food_court") return "food";
-  if(amenity==="marketplace") return "market";
-  if(shop==="supermarket"||shop==="convenience"||shop==="greengrocer"||shop==="bakery"||shop==="butcher"||shop==="mall"||shop==="kiosk") return "market";
-  if(shop) return "market";
-  return "all";
-}
-function placeKindMeta(kind){
-  return placeKinds[kind]||placeKinds.all;
-}
-function placeImportance(place){
-  const weights={pharmacy:7,fuel:6,market:5,parking:4,cafe:3,food:2,all:1};
-  let score=weights[place.kind]||1;
-  const generic=placeKindMeta(place.kind).label.toLowerCase();
-  if(String(place.name||"").toLowerCase()!==generic) score+=1.4;
-  if(place.distance<=160) score+=1.2;
-  else if(place.distance<=300) score+=.7;
-  return score;
-}
-function stationSymbolSvg(iconClass){
-  return '<svg class="'+iconClass+'" viewBox="0 0 24 24" aria-hidden="true">'+
-    '<path d="M12 20.5s6-4.76 6-10.3a6 6 0 1 0-12 0c0 5.54 6 10.3 6 10.3z"></path>'+
-    '<circle cx="12" cy="10.2" r="2.35"></circle>'+
-  '</svg>';
-}
-function buildMarkerIcon(kind,isStation){
-  const meta=isStation?{short:"R",color:"#37d8a2"}:placeKindMeta(kind);
-  const cls=isStation?"mapMarker station":"mapMarker";
-  return L.divIcon({
-    className:"mapMarkerShell",
-    html:isStation
-      ? '<span class="'+cls+'" style="--pin:'+meta.color+'"><span class="mapMarkerIcon">'+stationSymbolSvg("mapMarkerSvg")+"</span></span>"
-      : '<span class="'+cls+'" style="--pin:'+meta.color+'">'+meta.short+"</span>",
-    iconSize:isStation?[48,48]:[28,28],
-    iconAnchor:isStation?[24,24]:[14,14],
-    popupAnchor:[0,-12]
-  });
-}
-function renderFilterChips(){
-  if(!mapUi.chipRow) return;
-  mapUi.chipRow.innerHTML=Object.keys(placeKinds).map((key)=>{
-    const meta=placeKinds[key];
-    const active=mapState.activeFilter===key?" active":"";
-    return '<button class="mapChip'+active+'" type="button" data-kind="'+key+'" style="--dot:'+meta.color+'"><span class="mapChipDot"></span>'+meta.label+"</button>";
-  }).join("");
-}
-function updateMapLinks(){
-  if(!Number.isFinite(mapState.lat)||!Number.isFinite(mapState.lng)) return;
-  const q=mapState.lat.toFixed(5)+","+mapState.lng.toFixed(5);
-  const openHref="https://www.google.com/maps?q="+encodeURIComponent(q);
-  if(mapUi.openBtn) mapUi.openBtn.href=openHref;
-}
-function syncStationCopy(){
-  if(mapUi.stationGlyph) mapUi.stationGlyph.innerHTML=stationSymbolSvg("stationBadgeSvg");
-  if(mapUi.stationName) mapUi.stationName.textContent=STATION_DISPLAY;
-  if(mapUi.stationAddress) mapUi.stationAddress.textContent=STATION_ADDRESS;
-  if(mapUi.stationFocusLabel) mapUi.stationFocusLabel.textContent=STATION_DISPLAY;
-  if(mapUi.focusPin) mapUi.focusPin.innerHTML=stationSymbolSvg("stationFocusSvg");
-}
-function applyStationIdentity(data){
-  if(data&&typeof data.stationName==="string"&&data.stationName.trim()) STATION_DISPLAY=data.stationName.trim();
-  if(data&&typeof data.stationAddr==="string"&&data.stationAddr.trim()) STATION_ADDRESS=data.stationAddr.trim();
-  syncStationCopy();
-}
-function layoutStationFocus(){
-  if(!mapUi.focus) return;
-  mapUi.focus.style.top="";
-}
-function refreshStationFocus(){
-  layoutStationFocus();
-  if(mapState.map&&Number.isFinite(mapState.lat)&&Number.isFinite(mapState.lng)){
-    mapState.map.invalidateSize(false);
-    mapState.map.setView(focusAdjustedCenter(mapState.lat,mapState.lng),MAP_FOCUS_ZOOM,{animate:false});
-    const container=mapState.map.getContainer();
-    const focusTarget=mapUi.focusPin||mapUi.focus;
-    if(container&&focusTarget){
-      const containerRect=container.getBoundingClientRect();
-      const focusRect=focusTarget.getBoundingClientRect();
-      if(containerRect.width&&containerRect.height&&focusRect.width&&focusRect.height){
-        const desired=L.point(
-          containerRect.width/2,
-          (focusRect.top+(focusRect.height/2))-containerRect.top
-        );
-        const actual=mapState.map.latLngToContainerPoint(L.latLng(mapState.lat,mapState.lng));
-        const delta=actual.subtract(desired);
-        if(Math.abs(delta.x)>1||Math.abs(delta.y)>1){
-          mapState.map.panBy(delta,{animate:false});
-        }
-      }
-    }
-  }
-}
-function focusAdjustedCenter(lat,lng){
-  if(!mapState.map||!mapUi.focus) return L.latLng(lat,lng);
-  const container=mapState.map.getContainer();
-  if(!container) return L.latLng(lat,lng);
-  const containerRect=container.getBoundingClientRect();
-  const focusTarget=mapUi.focusPin||mapUi.focus;
-  const focusRect=focusTarget.getBoundingClientRect();
-  if(!containerRect.width||!containerRect.height||!focusRect.width||!focusRect.height) return L.latLng(lat,lng);
-  const desired=L.point(
-    containerRect.width/2,
-    (focusRect.top+(focusRect.height/2))-containerRect.top
-  );
-  const zoom=mapState.map.getZoom();
-  const stationProj=mapState.map.project(L.latLng(lat,lng),zoom);
-  const newCenterProj=stationProj.add(mapState.map.getSize().divideBy(2).subtract(desired));
-  return mapState.map.unproject(newCenterProj,zoom);
-}
-function ensureMap(lat,lng,radius,stationLabel){
-  if(!Number.isFinite(lat)||!Number.isFinite(lng)) {
-    setMapFallback("Koordinat bilgisi bekleniyor");
-    return false;
-  }
-  mapState.lat=lat;
-  mapState.lng=lng;
-  mapState.radius=Math.max(150,Math.round(Number(radius)||700));
-  updateMapLinks();
-  syncStationCopy();
-  if(mapUi.coords) mapUi.coords.textContent=lat.toFixed(5)+", "+lng.toFixed(5);
-  if(mapUi.radius) mapUi.radius.textContent=mapState.radius+" m";
-  if(typeof L==="undefined") {
-    setMapFallback("Harita kutuphanesi yuklenemedi");
-    return false;
-  }
-	  if(!mapState.map){
-	    mapState.map=L.map("mapCanvas",{zoomControl:false,attributionControl:false,scrollWheelZoom:true});
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
-      maxZoom:19,
-      attribution:"&copy; OpenStreetMap"
-    }).addTo(mapState.map);
-    L.control.zoom({position:"bottomright"}).addTo(mapState.map);
-    L.control.attribution({prefix:false,position:"bottomleft"}).addAttribution("&copy; OpenStreetMap").addTo(mapState.map);
-    mapState.nearbyLayer=L.layerGroup().addTo(mapState.map);
-	  }
-	  const center=[lat,lng];
-	  mapState.map.setView(center,MAP_FOCUS_ZOOM,{animate:false});
-	  if(mapState.nearbyLayer) mapState.nearbyLayer.clearLayers();
-	  if(mapState.stationMarker) mapState.stationMarker.remove();
-	  mapState.stationMarker=L.marker(center,{icon:buildMarkerIcon("all",true),keyboard:false}).addTo(mapState.map);
-	  mapState.stationMarker.bindPopup("<strong>"+escapeHtml(STATION_DISPLAY)+"</strong><br>"+escapeHtml(STATION_ADDRESS));
-	  if(mapState.stationMarker.setZIndexOffset) mapState.stationMarker.setZIndexOffset(1800);
-	  if(mapState.rangeCircle) mapState.rangeCircle.remove();
-	  mapState.rangeCircle=L.circle(center,{
-	    radius:26,
-	    color:"rgba(104,245,140,.52)",
-	    weight:1.2,
-	    fillColor:"rgba(118,255,142,.18)",
-	    fillOpacity:.2
-	  }).addTo(mapState.map);
-  if(mapState.rangeCircle.bringToBack) mapState.rangeCircle.bringToBack();
-  refreshStationFocus();
-  setTimeout(refreshStationFocus,90);
-  setTimeout(refreshStationFocus,260);
-  setMapFallback("");
-  return true;
-}
-async function fetchOverpassPlaces(){
-  const query='[out:json][timeout:18];('+
-    'node(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[shop];'+
-    'way(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[shop];'+
-    'relation(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[shop];'+
-    'node(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[amenity~"cafe|restaurant|fast_food|food_court|pharmacy|fuel|parking|marketplace"];'+
-    'way(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[amenity~"cafe|restaurant|fast_food|food_court|pharmacy|fuel|parking|marketplace"];'+
-    'relation(around:'+mapState.radius+','+mapState.lat+','+mapState.lng+')[amenity~"cafe|restaurant|fast_food|food_court|pharmacy|fuel|parking|marketplace"];'+
-  ');out center 80;';
-  const resp=await fetch("https://overpass-api.de/api/interpreter",{
-    method:"POST",
-    headers:{"Content-Type":"text/plain;charset=UTF-8"},
-    body:query
-  });
-  if(!resp.ok) throw new Error("Yakindaki yerler alinamadi");
-  return resp.json();
-}
-function normalizePlaces(payload){
-  const elements=(payload&&payload.elements)||[];
-  const dedupe=new Map();
-  elements.forEach((el)=>{
-    const lat=Number(el.lat ?? (el.center&&el.center.lat));
-    const lng=Number(el.lon ?? (el.center&&el.center.lon));
-    if(!Number.isFinite(lat)||!Number.isFinite(lng)) return;
-    const tags=el.tags||{};
-    const kind=placeKindFor(tags);
-    if(kind==="all") return;
-    const name=(tags.name||tags.brand||tags.operator||placeKindMeta(kind).label).trim();
-    const distance=distanceMeters(mapState.lat,mapState.lng,lat,lng);
-    const key=name+"|"+kind+"|"+lat.toFixed(5)+"|"+lng.toFixed(5);
-    if(dedupe.has(key)) return;
-    dedupe.set(key,{
-      name:name,
-      kind:kind,
-      lat:lat,
-      lng:lng,
-      distance:distance,
-      meta:tags.shop||tags.amenity||"isletme"
-    });
-  });
-  return Array.from(dedupe.values()).sort((a,b)=>a.distance-b.distance).slice(0,24);
-}
-function renderPlaces(){
-  const visible=mapState.allPlaces.filter((place)=>mapState.activeFilter==="all"||place.kind===mapState.activeFilter);
-  const markerPlaces=[...visible].sort((a,b)=>placeImportance(b)-placeImportance(a)||a.distance-b.distance).slice(0,8);
-  if(mapUi.count) mapUi.count.textContent=String(visible.length);
-  if(mapUi.status) mapUi.status.textContent=visible.length?("En yakin "+visible.length+" nokta gosteriliyor"):"Bu filtre icin nokta bulunamadi";
-  if(mapState.nearbyLayer) mapState.nearbyLayer.clearLayers();
-  markerPlaces.forEach((place)=>{
-    const meta=placeKindMeta(place.kind);
-    if(mapState.nearbyLayer){
-      const marker=L.marker([place.lat,place.lng],{icon:buildMarkerIcon(place.kind,false)}).addTo(mapState.nearbyLayer);
-      marker.bindPopup("<strong>"+escapeHtml(place.name)+"</strong><br>"+escapeHtml(meta.label)+" • "+escapeHtml(fmtDistance(place.distance)));
-    }
-  });
-  if(mapState.rangeCircle&&mapState.rangeCircle.bringToBack) mapState.rangeCircle.bringToBack();
-  if(mapState.stationMarker&&mapState.stationMarker.setZIndexOffset) mapState.stationMarker.setZIndexOffset(1600);
-  refreshStationFocus();
-  if(!mapUi.list) return;
-  if(!visible.length){
-    mapUi.list.innerHTML='<div class="placeEmpty">Bu yaricap ve filtre ile uygun bir nokta bulunamadi. Istersen “Yakin yerleri yenile” ile tekrar deneyebilirsin.</div>';
-    return;
-  }
-  mapUi.list.innerHTML=visible.map((place)=>{
-    const meta=placeKindMeta(place.kind);
-    const q=encodeURIComponent(place.lat.toFixed(5)+","+place.lng.toFixed(5));
-    return '<article class="placeCard">'+
-      '<div class="placeTop">'+
-        '<div class="placeName">'+escapeHtml(place.name)+'</div>'+
-        '<div class="placeTag"><span class="placeDot" style="--dot:'+meta.color+'"></span>'+escapeHtml(meta.label)+'</div>'+
-      '</div>'+
-      '<div class="placeMeta"><span>'+escapeHtml(fmtDistance(place.distance))+'</span><span>'+escapeHtml(String(place.meta).replace(/_/g," "))+'</span></div>'+
-      '<div class="placeActions">'+
-        '<a class="placeBtn primary" href="https://www.google.com/maps/dir/?api=1&destination='+q+'" target="_blank" rel="noopener noreferrer">Yol tarifi</a>'+
-        '<a class="placeBtn" href="https://www.google.com/maps?q='+q+'" target="_blank" rel="noopener noreferrer">Ac</a>'+
-      '</div>'+
-    '</article>';
-  }).join("");
-}
-async function loadPlaces(force){
-  if(!Number.isFinite(mapState.lat)||!Number.isFinite(mapState.lng)) return;
-  const key=mapState.lat.toFixed(5)+","+mapState.lng.toFixed(5)+":"+mapState.radius;
-  if(!force&&mapState.lastFetchKey===key&&mapState.allPlaces.length){
-    renderPlaces();
-    return;
-  }
-  if(mapUi.status) mapUi.status.textContent="Yakin yerler taraniyor";
-  if(mapUi.list) mapUi.list.innerHTML='<div class="placeEmpty">Yakindaki isletmeler OpenStreetMap verisinden cekiliyor...</div>';
-  try{
-    const payload=await fetchOverpassPlaces();
-    mapState.allPlaces=normalizePlaces(payload);
-    mapState.lastFetchKey=key;
-    renderPlaces();
-  }catch(err){
-    if(mapUi.status) mapUi.status.textContent="Harita verisi su an alinamadi";
-    if(mapUi.list) mapUi.list.innerHTML='<div class="placeEmpty">Yakin yerler yuklenemedi. Internet erisimi veya Overpass servisi gecici olarak yogun olabilir.</div>';
-  }
-}
-function setupMapUi(){
-  renderFilterChips();
-  if(mapUi.chipRow){
-    mapUi.chipRow.addEventListener("click",(event)=>{
-      const btn=event.target&&event.target.closest?event.target.closest("[data-kind]"):null;
-      if(!btn) return;
-      mapState.activeFilter=btn.getAttribute("data-kind")||"all";
-      renderFilterChips();
-      renderPlaces();
-    });
-  }
-  if(mapUi.refreshBtn){
-    mapUi.refreshBtn.addEventListener("click",()=>loadPlaces(true));
-  }
-}
-window.addEventListener("resize",refreshStationFocus);
-if(window.visualViewport&&window.visualViewport.addEventListener){
-  window.visualViewport.addEventListener("resize",refreshStationFocus);
-}
-if(typeof ResizeObserver!=="undefined"){
-  const focusObserver=new ResizeObserver(()=>refreshStationFocus());
-  [mapUi.app,mapUi.statsCard,mapUi.focus].forEach((el)=>{
-    if(el) focusObserver.observe(el);
-  });
 }
 function chargeCmd(mode){fetch('/charge_cmd?m='+mode).then(()=>pull()).catch(()=>{});}
 function updateChargeAction(modeId){
@@ -1392,9 +981,7 @@ function pull(){
     const timeSec=(liveSession&&d.sLiveSec!==undefined)?(Number(d.sLiveSec)||0):(Number(d.tSec)||0);
     const activePhases=Math.max(1,[ia,ib,ic].filter(v=>v>0.5).length||phaseCount);
     const displayCurrent=activePhases>1 ? (it/activePhases) : it;
-	    const stationBase=(d.wifiLoc&&d.wifiLoc!=="-")?d.wifiLoc:((d.host&&d.host!=="-")?d.host:"EVSE Istasyonu");
-	    applyStationIdentity(d);
-	    chartCeil=Math.max(6,totalLimit);
+    chartCeil=Math.max(6,totalLimit);
     setText('it',displayCurrent.toFixed(1));
     setText('currentMetric',displayCurrent.toFixed(1));
     setText('i1',ia.toFixed(1)+" A");
@@ -1410,7 +997,6 @@ function pull(){
     setText('limitMeta',phaseCount+" faz / "+limitA.toFixed(1)+" A limit");
     setText('phaseSummary',phaseCount+" faz • "+loadPct.toFixed(0)+"% doluluk");
     setText('gaugeLabel',phaseCount+" faz / "+limitA.toFixed(1)+" A");
-    setText('stationLabel',stationBase);
     updateChargeAction(Number(d.modeId)||0);
     if(d.rLbl!==undefined) setText('relay',"R:"+d.rLbl);
     if(d.state!==undefined) updateState(d.state);
@@ -1444,11 +1030,6 @@ if("serviceWorker" in navigator){
 }
 renderLiveChart();
 updateDateLabel();
-toggleWifiModeFields();
-window.addEventListener("load",()=>{
-  refreshStationFocus();
-  setTimeout(refreshStationFocus,180);
-});
 setInterval(pull,POLL_MS);
 setInterval(updateDateLabel,30000);
 pull();
