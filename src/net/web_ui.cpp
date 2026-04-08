@@ -763,7 +763,7 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 .metricCard--stats{max-width:338px}
 .metricCardArt{display:flex;justify-content:center;align-items:center;margin:0 0 14px;padding:6px 0 2px;color:rgba(208,237,255,.92)}
 .vehicleStage{position:relative;width:min(78%,228px);isolation:isolate}
-.vehicleStage img{display:block;width:100%;height:auto;opacity:.95;filter:drop-shadow(0 12px 24px rgba(4,16,28,.22))}
+.vehicleStage img{display:block;width:100%;height:auto;opacity:.95;transform:rotate(90deg);transform-origin:50% 50%;filter:drop-shadow(0 12px 24px rgba(4,16,28,.22))}
 .chargeOverlay{position:absolute;inset:0;pointer-events:none}
 .chargeAura{position:absolute;left:19%;right:19%;top:26%;bottom:18%;border-radius:999px;background:
 radial-gradient(circle at 50% 50%,rgba(124,247,215,.26) 0%,rgba(124,247,215,.13) 32%,rgba(124,247,215,0) 72%);
@@ -787,6 +787,11 @@ body.state-E .vehicleStage .chargeBeam,body.state-F .vehicleStage .chargeBeam{ba
 body.state-E .vehicleStage .chargePulse,body.state-F .vehicleStage .chargePulse{background:radial-gradient(circle,rgba(255,248,248,.98) 0%,rgba(255,150,150,.82) 38%,rgba(255,120,120,.08) 72%,rgba(255,120,120,0) 100%);box-shadow:0 0 18px rgba(255,142,142,.38),0 0 34px rgba(255,142,142,.2)}
 body.state-E .vehicleStage .chargeSpark svg,body.state-F .vehicleStage .chargeSpark svg{fill:#fff1f1}
 .metricCardDate{margin:2px 0 14px;padding:11px 14px;border-radius:18px;text-align:center;font-size:16px;font-weight:800;letter-spacing:-.02em;color:#d5f0ff;background:linear-gradient(180deg,rgba(12,32,50,.68),rgba(7,19,31,.48));border:1px solid rgba(151,210,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.stationMeta{margin:0 0 14px;display:grid;gap:8px}
+.stationMetaLine{padding:10px 12px;border-radius:16px;background:linear-gradient(180deg,rgba(12,32,50,.54),rgba(7,19,31,.38));border:1px solid rgba(151,210,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+.stationMetaLabel{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8cb9cb}
+.stationMetaValue{margin-top:4px;color:#effcff;font-size:15px;font-weight:800;line-height:1.35;word-break:break-word}
+.stationMetaValue.muted{color:#c4e7f4;font-size:13px;font-weight:700}
 .metricLabel{font-size:17px;color:#91cbb9;font-weight:700;}
 .metricHero{margin-top:10px;font-size:46px;line-height:1;font-weight:800;letter-spacing:-.04em;color:#f1fffb;}
 .metricHero .unit{font-size:.58em;font-weight:700;letter-spacing:-.01em;color:#7fe5c1;}
@@ -849,6 +854,16 @@ body.state-E .vehicleStage .chargeSpark svg,body.state-F .vehicleStage .chargeSp
       </div>
     </div>
     <div class="metricCardDate" id="dateLabel">-</div>
+    <div class="stationMeta">
+      <div class="stationMetaLine">
+        <div class="stationMetaLabel">Istasyon Adi</div>
+        <div class="stationMetaValue" id="stationNameLabel">Istasyon</div>
+      </div>
+      <div class="stationMetaLine">
+        <div class="stationMetaLabel">Uretilen Adres</div>
+        <div class="stationMetaValue muted" id="stationAddrLabel">-</div>
+      </div>
+    </div>
     <div class="metricsGrid">
       <div class="metricCell metricCell--power">
         <div class="metricHead">
@@ -1042,6 +1057,8 @@ function pull(){
     setText('pwr',powerKw.toFixed(2));
     setText('ekwh',energy.toFixed(1));
     setText('tsec',fmtTime(timeSec));
+    setText('stationNameLabel',d.stationName||'Istasyon');
+    setText('stationAddrLabel',d.stationAddr||'-');
     setText('energyMeta',liveSession?"Aktif seans":"Son okuma");
     setText('timeMeta',phaseCount+" faz");
     setText('limitA',limitA.toFixed(1));
