@@ -3,6 +3,9 @@ import re
 import subprocess
 import sys
 import time
+import hashlib
+import shutil
+import os
 from pathlib import Path
 
 
@@ -21,6 +24,8 @@ def bump_patch(version: str) -> str:
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
     version_path = repo_root / "version.json"
+    build_bin_path = repo_root / ".pio" / "build" / "esp32-s3-devkitc-1" / "firmware.bin"
+    ota_bin_path = repo_root / "firmware" / "uzaktanotali.bin"
     if not version_path.exists():
         print("[version-hook] Skip: version.json not found")
         return 0
@@ -33,14 +38,31 @@ def main() -> int:
 
     next_version = bump_patch(current_version)
     data["version"] = next_version
-    version_path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=4) + "\n",
-        encoding="utf-8",
+
+    version_path.write_text(json.dumps(data, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
+
+    env = os.environ.copy()
+    local_bin = str(Path.home() / ".local" / "bin")
+    env["PATH"] = local_bin + os.pathsep + env.get("PATH", "")
+    subprocess.run(
+        ["pio", "run"],
+        cwd=repo_root,
+        env=env,
+        check=True,
     )
+
+    ota_bin_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(build_bin_path, ota_bin_path)
+    size_bytes = ota_bin_path.stat().st_size
+    sha256 = hashlib.sha256(ota_bin_path.read_bytes()).hexdigest()
+
+    data["size"] = size_bytes
+    data["sha256"] = sha256
+    version_path.write_text(json.dumps(data, ensure_ascii=False, indent=4) + "\n", encoding="utf-8")
 
     for attempt in range(10):
         add_result = subprocess.run(
-            ["git", "add", str(version_path)],
+            ["git", "add", str(version_path), str(ota_bin_path)],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -53,7 +75,10 @@ def main() -> int:
     else:
         raise RuntimeError("git add failed repeatedly because index.lock stayed busy")
 
-    print(f"[version-hook] version.json {current_version} -> {next_version}")
+    print(
+        f"[version-hook] prepared OTA {current_version} -> {next_version} "
+        f"(size={size_bytes}, sha256={sha256})"
+    )
     return 0
 
 
