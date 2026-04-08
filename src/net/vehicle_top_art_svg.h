@@ -9,7 +9,7 @@ static const char VEHICLE_TOP_ART_SVG[] PROGMEM = R"CARSVG(
  preserveAspectRatio="xMidYMid meet">
 
 <g transform="translate(0.000000,2000.000000) scale(0.100000,-0.100000)"
-fill="currentColor" stroke="none">
+fill="#d7f2ff" stroke="none">
 <path d="M11190 13173 c-52 -8 -89 -25 -95 -42 -7 -23 18 -143 45 -211 12 -29
 37 -80 56 -112 18 -33 34 -61 34 -64 0 -8 -138 -4 -191 7 -55 10 -990 15
 -1059 5 -19 -3 -182 -10 -362 -17 l-326 -11 -64 30 c-115 54 -179 62 -323 42

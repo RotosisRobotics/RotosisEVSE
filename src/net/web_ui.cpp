@@ -1484,8 +1484,8 @@ static const char MANIFEST_JSON[] PROGMEM = R"JSON(
 )JSON";
 
 static const char SERVICE_WORKER_JS[] PROGMEM = R"JS(
-const CACHE_NAME = "evse-pwa-v6";
-const ASSETS = ["/", "/manifest.json", "/app-icon.svg"];
+const CACHE_NAME = "evse-pwa-v7";
+const ASSETS = ["/", "/manifest.json", "/app-icon.svg", "/vehicle-top-art.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
