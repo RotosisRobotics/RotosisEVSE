@@ -733,8 +733,7 @@ body{position:relative;overflow-x:hidden;font-family:"Avenir Next","Segoe UI","T
 radial-gradient(circle at 18% 16%, rgba(34,219,167,.18) 0%, rgba(34,219,167,0) 28%),
 radial-gradient(circle at 84% 14%, rgba(65,177,255,.18) 0%, rgba(65,177,255,0) 26%),
 linear-gradient(180deg,#07131f 0%,#0a1d2f 46%,#05101a 100%);}
-body::before,body::after{content:"";position:fixed;z-index:0;border-radius:999px;pointer-events:none;filter:blur(18px);}
-body::before{width:260px;height:260px;top:74px;left:-88px;background:radial-gradient(circle, rgba(56,223,169,.22) 0%, rgba(56,223,169,0) 72%);animation:floatGlowA 16s ease-in-out infinite;}
+body::after{content:"";position:fixed;z-index:0;border-radius:999px;pointer-events:none;filter:blur(18px);}
 body::after{width:290px;height:290px;right:-106px;bottom:92px;background:radial-gradient(circle, rgba(67,157,255,.18) 0%, rgba(67,157,255,0) 72%);animation:floatGlowB 18s ease-in-out infinite;}
 body.state-A{--accent:#66c7ff;--accentDeep:#249ff0;--accentSoft:rgba(102,199,255,.18)}
 body.state-B{--accent:#7ae6c4;--accentDeep:#2fc79a;--accentSoft:rgba(122,230,196,.18)}
@@ -763,7 +762,30 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 .metricCard{max-width:338px;margin:20px auto 0;padding:20px 22px;border-radius:26px;background:linear-gradient(180deg,rgba(10,28,43,.82),rgba(7,19,31,.62));border:1px solid rgba(151,210,255,.14);box-shadow:0 24px 40px rgba(2,10,18,.28);backdrop-filter:blur(20px);animation:fadeLift 1s .26s both;}
 .metricCard--stats{max-width:338px}
 .metricCardArt{display:flex;justify-content:center;align-items:center;margin:0 0 14px;padding:6px 0 2px;color:rgba(208,237,255,.92)}
-.metricCardArt img{display:block;width:min(78%,228px);height:auto;opacity:.95;filter:drop-shadow(0 12px 24px rgba(4,16,28,.22))}
+.vehicleStage{position:relative;width:min(78%,228px);isolation:isolate}
+.vehicleStage img{display:block;width:100%;height:auto;opacity:.95;filter:drop-shadow(0 12px 24px rgba(4,16,28,.22))}
+.chargeOverlay{position:absolute;inset:0;pointer-events:none}
+.chargeAura{position:absolute;left:19%;right:19%;top:26%;bottom:18%;border-radius:999px;background:
+radial-gradient(circle at 50% 50%,rgba(124,247,215,.26) 0%,rgba(124,247,215,.13) 32%,rgba(124,247,215,0) 72%);
+opacity:.18;transform:scale(.9);filter:blur(10px);transition:opacity .35s ease,transform .35s ease}
+.chargeBeam{position:absolute;left:34%;right:34%;top:19%;bottom:15%;border-radius:999px;background:
+linear-gradient(180deg,rgba(123,247,213,0) 0%,rgba(123,247,213,.12) 14%,rgba(207,255,245,.92) 34%,rgba(123,247,213,.18) 56%,rgba(123,247,213,0) 100%);
+opacity:.2;filter:blur(5px);transform-origin:50% 50%;animation:chargeBeamFlow var(--chargeSpeed,2.6s) linear infinite}
+.chargePulse{position:absolute;left:50%;width:13%;aspect-ratio:1;border-radius:999px;transform:translateX(-50%);background:
+radial-gradient(circle,rgba(240,255,251,.98) 0%,rgba(136,245,210,.82) 38%,rgba(76,219,171,.08) 72%,rgba(76,219,171,0) 100%);
+box-shadow:0 0 18px rgba(122,246,211,.42),0 0 34px rgba(122,246,211,.22);opacity:0;animation:chargeTravel var(--chargeSpeed,2.6s) linear infinite}
+.chargePulse.p2{animation-delay:calc(var(--chargeSpeed,2.6s)/3)}
+.chargePulse.p3{animation-delay:calc((var(--chargeSpeed,2.6s)/3)*2)}
+.chargeSpark{position:absolute;left:50%;top:45%;width:20%;height:20%;transform:translate(-50%,-50%) rotate(-6deg);opacity:.18;filter:drop-shadow(0 0 12px rgba(142,248,219,.4));animation:sparkFlash 2.1s ease-in-out infinite}
+.chargeSpark svg{display:block;width:100%;height:100%;fill:#dffff6}
+.vehicleStage .chargeAura,.vehicleStage .chargeBeam,.vehicleStage .chargePulse,.vehicleStage .chargeSpark{animation-play-state:paused}
+.vehicleStage.is-charging .chargeAura{opacity:var(--chargeOpacity,.72);transform:scale(1.04)}
+.vehicleStage.is-charging .chargeBeam,.vehicleStage.is-charging .chargePulse,.vehicleStage.is-charging .chargeSpark{animation-play-state:running}
+.vehicleStage.is-charging .chargeBeam{opacity:calc(.16 + (var(--chargeOpacity,.72)*.7))}
+body.state-E .vehicleStage .chargeAura,body.state-F .vehicleStage .chargeAura{background:radial-gradient(circle at 50% 50%,rgba(255,151,151,.22) 0%,rgba(255,151,151,.10) 34%,rgba(255,151,151,0) 72%)}
+body.state-E .vehicleStage .chargeBeam,body.state-F .vehicleStage .chargeBeam{background:linear-gradient(180deg,rgba(255,140,140,0) 0%,rgba(255,140,140,.14) 14%,rgba(255,238,238,.92) 34%,rgba(255,140,140,.16) 56%,rgba(255,140,140,0) 100%)}
+body.state-E .vehicleStage .chargePulse,body.state-F .vehicleStage .chargePulse{background:radial-gradient(circle,rgba(255,248,248,.98) 0%,rgba(255,150,150,.82) 38%,rgba(255,120,120,.08) 72%,rgba(255,120,120,0) 100%);box-shadow:0 0 18px rgba(255,142,142,.38),0 0 34px rgba(255,142,142,.2)}
+body.state-E .vehicleStage .chargeSpark svg,body.state-F .vehicleStage .chargeSpark svg{fill:#fff1f1}
 .metricCardDate{margin:2px 0 14px;padding:11px 14px;border-radius:18px;text-align:center;font-size:16px;font-weight:800;letter-spacing:-.02em;color:#d5f0ff;background:linear-gradient(180deg,rgba(12,32,50,.68),rgba(7,19,31,.48));border:1px solid rgba(151,210,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
 .metricLabel{font-size:17px;color:#91cbb9;font-weight:700;}
 .metricHero{margin-top:10px;font-size:46px;line-height:1;font-weight:800;letter-spacing:-.04em;color:#f1fffb;}
@@ -784,8 +806,11 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 @keyframes floatGlowA{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(22px,18px,0) scale(1.08)}}
 @keyframes floatGlowB{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-18px,-14px,0) scale(1.1)}}
 @keyframes livePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.22)}}
-@media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}.metricCardArt img{width:min(74%,210px)}}
-@media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.metricCard{margin-top:16px;padding:16px 16px}.metricCardArt{margin-bottom:12px}.metricCardArt img{width:min(72%,190px)}}
+@keyframes chargeTravel{0%{top:74%;opacity:0;transform:translateX(-50%) scale(.76)}12%{opacity:calc(.22 + var(--chargeOpacity,.72))}50%{opacity:calc(.35 + var(--chargeOpacity,.72)*.75)}100%{top:12%;opacity:0;transform:translateX(-50%) scale(1.06)}}
+@keyframes chargeBeamFlow{0%{transform:translateY(10%) scaleY(.92);opacity:.05}45%{transform:translateY(-2%) scaleY(1);opacity:calc(.12 + var(--chargeOpacity,.72)*.72)}100%{transform:translateY(-12%) scaleY(1.05);opacity:.04}}
+@keyframes sparkFlash{0%,100%{transform:translate(-50%,-50%) rotate(-6deg) scale(.88);opacity:.08}38%{transform:translate(-50%,-50%) rotate(2deg) scale(1.08);opacity:calc(.16 + var(--chargeOpacity,.72)*.7)}52%{transform:translate(-50%,-50%) rotate(-4deg) scale(.94);opacity:.2}}
+@media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}.vehicleStage{width:min(74%,210px)}}
+@media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.metricCard{margin-top:16px;padding:16px 16px}.metricCardArt{margin-bottom:12px}.vehicleStage{width:min(72%,190px)}}
 </style>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a1d2f">
@@ -809,7 +834,19 @@ body.state-E,body.state-F{--accent:#ff8b8b;--accentDeep:#ff6464;--accentSoft:rgb
 
   <section class="metricCard metricCard--stats">
     <div class="metricCardArt" aria-hidden="true">
-      <img src="/vehicle-top-art.svg" alt="">
+      <div class="vehicleStage" id="vehicleStage">
+        <img src="/vehicle-top-art.svg" alt="">
+        <div class="chargeOverlay">
+          <div class="chargeAura"></div>
+          <div class="chargeBeam"></div>
+          <div class="chargePulse p1"></div>
+          <div class="chargePulse p2"></div>
+          <div class="chargePulse p3"></div>
+          <div class="chargeSpark">
+            <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M35.6 4 15 35.5h12.8L22.8 60 49 25.8H36.4z"/></svg>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="metricCardDate" id="dateLabel">-</div>
     <div class="metricsGrid">
@@ -861,6 +898,7 @@ const MAX_POINTS=40;
 let livePoints=[];
 let chartCeil=32;
 let currentChargeModeId=0;
+const vehicleStage=document.getElementById("vehicleStage");
 const stateMeta={
   A:{name:"Hazır",hint:"Araç bekleniyor"},
   B:{name:"Bağlı",hint:"Araç bağlandı"},
@@ -904,6 +942,20 @@ function setSync(ok){
   if(!el) return;
   el.textContent=ok?"LIVE":"WAIT";
   el.className=ok?"sync live":"sync";
+}
+function setChargingVisual(state,powerKw,currentA){
+  if(!vehicleStage) return;
+  const waiting=state==="A";
+  const active=waiting || ((state==="C"||state==="D") && ((Number(powerKw)||0)>0.08 || (Number(currentA)||0)>0.6));
+  vehicleStage.classList.toggle("is-charging",active);
+  const intensity=waiting
+    ? .34
+    : active
+      ? clamp(Math.max((Number(powerKw)||0)/11,(Number(currentA)||0)/32,.28),.28,1)
+      : .16;
+  const speed=(waiting?2.85:(2.9-(intensity*1.35))).toFixed(2)+"s";
+  vehicleStage.style.setProperty("--chargeOpacity",intensity.toFixed(2));
+  vehicleStage.style.setProperty("--chargeSpeed",speed);
 }
 function setGauge(loadPct){
   const pct=clamp(loadPct,0,100);
@@ -1000,6 +1052,7 @@ function pull(){
     updateChargeAction(Number(d.modeId)||0);
     if(d.rLbl!==undefined) setText('relay',"R:"+d.rLbl);
     if(d.state!==undefined) updateState(d.state);
+    setChargingVisual(String(d.state||"A"),powerKw,displayCurrent);
     if(d.ip!==undefined) setText('ip',d.ip);
     if(d.host!==undefined) setText('host',d.host);
     setGauge(loadPct);
