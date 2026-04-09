@@ -2,6 +2,9 @@
 
 Bu klasor, projeye tekrar baktiginda "hangi dosya ne is yapiyor, degisiklik icin nereye gidecegim?" sorusuna hizli cevap vermek icin tutulur.
 
+## Test Hook
+Pre-commit hook düzeltildi - Git Bash PATH eklendi.
+
 ## Nereden Baslamali
 - Projenin genel yerlesimini gormek icin: `docs/project-tree.md`
 - Hangi degisiklik hangi dosyadan yapilir ogrenmek icin: `docs/change-points.md`

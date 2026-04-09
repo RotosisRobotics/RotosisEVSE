@@ -45,7 +45,7 @@ def main() -> int:
     local_bin = str(Path.home() / ".local" / "bin")
     env["PATH"] = local_bin + os.pathsep + env.get("PATH", "")
     subprocess.run(
-        ["pio", "run"],
+        ["py", "-m", "platformio", "run"],
         cwd=repo_root,
         env=env,
         check=True,
