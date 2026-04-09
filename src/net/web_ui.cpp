@@ -772,11 +772,12 @@ static const char USER_HTML[] PROGMEM = R"HTML(
 :root{--bg:#06121d;--bg2:#0a2233;--panel:rgba(8,24,37,.78);--panelStrong:rgba(12,31,47,.92);--line:rgba(72,209,164,.18);--text:#ecfbf6;--muted:#8daea4;--accent:#37d8a2;--accentDeep:#15b987;--accentSoft:rgba(55,216,162,.18);--warn:#b6ef72;--err:#ff7d7d;--shadow:0 24px 50px rgba(1,9,16,.46);--shadowSoft:0 14px 32px rgba(2,10,18,.34);}
 html,body{margin:0;padding:0}
 body{position:relative;overflow-x:hidden;font-family:"Avenir Next","Segoe UI","Trebuchet MS",sans-serif;color:var(--text);min-height:100vh;background:
-radial-gradient(circle at 18% 16%, rgba(34,219,167,.18) 0%, rgba(34,219,167,0) 28%),
-radial-gradient(circle at 84% 14%, rgba(65,177,255,.18) 0%, rgba(65,177,255,0) 26%),
-linear-gradient(180deg,#07131f 0%,#0a1d2f 46%,#05101a 100%);}
+radial-gradient(circle at 15% 15%, rgba(0,255,255,.15) 0%, rgba(0,255,255,0) 35%),
+radial-gradient(circle at 85% 85%, rgba(138,43,226,.15) 0%, rgba(138,43,226,0) 35%),
+radial-gradient(circle at 50% 50%, rgba(255,215,0,.1) 0%, rgba(255,215,0,0) 50%),
+linear-gradient(180deg,#0d0d0d 0%,#1a1a2e 40%,#16213e 80%,#0f0f23 100%);}
 body::after{content:"";position:fixed;z-index:0;border-radius:999px;pointer-events:none;filter:blur(18px);}
-body::after{width:290px;height:290px;right:-106px;bottom:92px;background:radial-gradient(circle, rgba(67,157,255,.18) 0%, rgba(67,157,255,0) 72%);animation:floatGlowB 18s ease-in-out infinite;}
+body::after{width:290px;height:290px;right:-106px;bottom:92px;background:radial-gradient(circle, rgba(0,255,255,.2) 0%, rgba(0,255,255,0) 70%);animation:floatGlowB 18s ease-in-out infinite;}
 body.state-A{--accent:#66c7ff;--accentDeep:#249ff0;--accentSoft:rgba(102,199,255,.18)}
 body.state-B{--accent:#7ae6c4;--accentDeep:#2fc79a;--accentSoft:rgba(122,230,196,.18)}
 body.state-C,body.state-D{--accent:#37d8a2;--accentDeep:#15b987;--accentSoft:rgba(55,216,162,.18)}
