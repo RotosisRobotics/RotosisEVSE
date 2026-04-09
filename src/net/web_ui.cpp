@@ -1319,6 +1319,10 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
     <h2>KULLANICI EKRANI OZEL CSS</h2>
     <div class="small">Buraya yazdigin CSS, kullanici ekranindaki tum elemanlari ezebilir. Ornek: `body{background:#000}` veya `.metricCard{border-radius:36px}`</div>
     <div class="kv"><div class="k">Ozel CSS</div><div class="v"><textarea id="userCssSet" onfocus="p()" onblur="r()" placeholder=".metricCard{outline:1px solid red}">__USER_CSS_TEXT__</textarea></div></div>
+    <div class="btns" style="margin-top:12px">
+      <button class="primary" onclick="applyUserCss()">CSS KAYDET</button>
+      <button onclick="window.open('/','_blank')">KULLANICI EKRANINI AC</button>
+    </div>
   </div>
 
   <div class="card pageSection" id="calibrationCard">
@@ -1616,6 +1620,18 @@ function applyWifiSettings(){
       pull(true);
     })
     .catch(()=>alert('Wi-Fi ayarlari kaydedilemedi'));
+}
+function applyUserCss(){
+  const q=new URLSearchParams();
+  q.append('userCss', document.getElementById('userCssSet').value);
+  if(document.activeElement) document.activeElement.blur();
+  fetch('/calib_apply?' + q.toString())
+    .then(() => {
+      alert('Kullanici ekrani CSS kaydedildi');
+      paused=false;
+      pull(true);
+    })
+    .catch(() => alert('Kullanici ekrani CSS kaydedilemedi'));
 }
 function runOtaCheckAdmin(){
   fetch('/ota_check', {cache:'no-store'}).then(() => {
