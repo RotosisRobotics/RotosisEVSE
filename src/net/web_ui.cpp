@@ -156,6 +156,7 @@ static const char* kDefaultStationAddress = "Fevzi Cakmak Mah. Sehit Ibrahim Bet
 static constexpr double kDefaultMapLat = 37.94559;
 static constexpr double kDefaultMapLng = 32.58082;
 static constexpr uint16_t kMapRadiusM = 520;
+static constexpr size_t kMaxUserScreenCssLen = 4096;
 static char s_deviceMac[18] = "";
 static char s_stationCode[7] = "";
 static char s_stationLabel[32] = "Istasyon";
@@ -169,6 +170,7 @@ static bool s_customWifiEnabled = false;
 static bool s_wifiUseDhcp = true;
 static String s_customWifiSsid;
 static String s_customWifiPassword;
+static String s_userScreenCustomCss;
 static IPAddress s_staticIp(192, 168, 1, 200);
 static IPAddress s_staticGateway(192, 168, 1, 1);
 static IPAddress s_staticSubnet(255, 255, 255, 0);
@@ -457,6 +459,22 @@ static void saveCurrentLimitSetting() {
   s_resetPrefs.putFloat("limitA", g_targetCurrentLimitA);
 }
 
+static void loadUserScreenCssSetting() {
+  if (!s_resetPrefsReady) {
+    s_userScreenCustomCss = "";
+    return;
+  }
+  s_userScreenCustomCss = s_resetPrefs.getString("user_css", "");
+  if (s_userScreenCustomCss.length() > kMaxUserScreenCssLen) {
+    s_userScreenCustomCss.remove(kMaxUserScreenCssLen);
+  }
+}
+
+static void saveUserScreenCssSetting() {
+  if (!s_resetPrefsReady) return;
+  s_resetPrefs.putString("user_css", s_userScreenCustomCss);
+}
+
 static void refreshDeviceIdentity() {
   uint8_t mac[6] = {0};
   WiFi.macAddress(mac);
@@ -558,6 +576,30 @@ static float clampFloatArg(const String& v, float minVal, float maxVal, float fa
 static float safeFinite(float v) {
   if (isnan(v) || isinf(v)) return 0.0f;
   return v;
+}
+
+static String htmlEscape(const String& value) {
+  String out;
+  out.reserve(value.length() + 16);
+  for (size_t i = 0; i < value.length(); ++i) {
+    const char c = value[i];
+    switch (c) {
+      case '&': out += F("&amp;"); break;
+      case '<': out += F("&lt;"); break;
+      case '>': out += F("&gt;"); break;
+      case '"': out += F("&quot;"); break;
+      case '\'': out += F("&#39;"); break;
+      default: out += c; break;
+    }
+  }
+  return out;
+}
+
+static String styleEscape(const String& value) {
+  String out = value;
+  out.replace("</style", "<\\/style");
+  out.replace("</STYLE", "<\\/STYLE");
+  return out;
 }
 
 static String jsonEscape(const String& value) {
@@ -824,6 +866,7 @@ body.state-E .vehicleStage .chargeSpark svg,body.state-F .vehicleStage .chargeSp
 @keyframes sparkFlash{0%,100%{transform:translate(-50%,-50%) rotate(-6deg) scale(.88);opacity:.08}38%{transform:translate(-50%,-50%) rotate(2deg) scale(1.08);opacity:calc(.16 + var(--chargeOpacity,.72)*.7)}52%{transform:translate(-50%,-50%) rotate(-4deg) scale(.94);opacity:.2}}
 @media(max-width:780px){.screenShell{padding:12px 10px 20px}.app{max-width:100%;min-height:calc(100vh - 30px)}.metricCard{max-width:94%;margin-top:18px;padding:18px 18px}.vehicleStage{width:min(74%,210px)}}
 @media(max-width:390px){.screenShell{padding:10px 8px 18px}.statusPill{padding:10px 13px;font-size:14px}.dateLine{font-size:18px}.locationLine{font-size:16px}.metricHero{font-size:40px}.metricValue{font-size:19px}.metricCard{margin-top:16px;padding:16px 16px}.metricCardArt{margin-bottom:12px}.vehicleStage{width:min(72%,190px)}}
+__USER_CUSTOM_CSS__
 </style>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a1d2f">
@@ -1234,7 +1277,8 @@ h2{margin:0 0 10px 0;font-size:14px;color:#b7c5e6}
 .k{color:#b7c5e6;font-size:12px}
 .v{font-weight:700}
 .mono{font-family:monospace;color:#00ffaa}
-input,select{width:100%;padding:8px;border-radius:10px;border:1px solid #20304a;background:#0c1424;color:#e8eefc;box-sizing:border-box}
+input,select,textarea{width:100%;padding:8px;border-radius:10px;border:1px solid #20304a;background:#0c1424;color:#e8eefc;box-sizing:border-box}
+textarea{min-height:180px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,"Courier New",monospace;line-height:1.45}
 .btns{display:flex;flex-wrap:wrap;gap:8px}
 button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#0c1424;color:#e8eefc;cursor:pointer}
 .primary{background:rgba(0,200,150,.18);border-color:rgba(0,200,150,.45)}
@@ -1271,6 +1315,10 @@ button{padding:8px 10px;border-radius:10px;border:1px solid #20304a;background:#
     <div class="kv"><div class="k">State (Stable/Raw)</div><div class="v mono"><span id="sStb">-</span> / <span id="sRaw">-</span></div></div>
     <div class="kv"><div class="k">CP High / Low</div><div class="v mono"><span id="cH">-</span> / <span id="cL">-</span></div></div>
     <div class="kv"><div class="k">ADC High / Low</div><div class="v mono"><span id="aH">-</span> / <span id="aL">-</span></div></div>
+    <div class="sep"></div>
+    <h2>KULLANICI EKRANI OZEL CSS</h2>
+    <div class="small">Buraya yazdigin CSS, kullanici ekranindaki tum elemanlari ezebilir. Ornek: `body{background:#000}` veya `.metricCard{border-radius:36px}`</div>
+    <div class="kv"><div class="k">Ozel CSS</div><div class="v"><textarea id="userCssSet" onfocus="p()" onblur="r()" placeholder=".metricCard{outline:1px solid red}">__USER_CSS_TEXT__</textarea></div></div>
   </div>
 
   <div class="card pageSection" id="calibrationCard">
@@ -1739,6 +1787,7 @@ function applyCal(){
   q.append('stationName', document.getElementById('stationNameSet').value);
   q.append('mapLat', document.getElementById('mapLat').value);
   q.append('mapLng', document.getElementById('mapLng').value);
+  q.append('userCss', document.getElementById('userCssSet').value);
   if(document.activeElement) document.activeElement.blur();
   fetch('/calib_apply?' + q.toString()).then(() => {
     alert('Tamam');
@@ -1825,14 +1874,17 @@ static void setupWiFi() {
 // Her endpoint kendi verisini veya komutunu burada uretir.
 static void handleRoot() {
   noteWebActivity();
+  String html(FPSTR(USER_HTML));
+  html.replace("__USER_CUSTOM_CSS__", styleEscape(s_userScreenCustomCss));
   noteHttpResponseSent();
-  server.send_P(200, "text/html", USER_HTML);
+  server.send(200, "text/html", html);
 }
 static void sendMainPage(const char* pageMode) {
   noteWebActivity();
   if (!requireAdminAuth()) return;
   String html(FPSTR(MAIN_HTML));
   html.replace("__PAGE_MODE__", pageMode ? pageMode : "admin");
+  html.replace("__USER_CSS_TEXT__", htmlEscape(s_userScreenCustomCss));
   noteHttpResponseSent();
   server.send(200, "text/html", html);
 }
@@ -2395,6 +2447,7 @@ static void handleCalibApply() {
   float rngLowMax = 0.0f, rngMidMax = 0.0f, rngLowOff = 0.0f, rngMidOff = 0.0f;
   bool locationChanged = false;
   bool stationNameChanged = false;
+  bool userCssChanged = false;
   current_sensor_get_calibration(&calA, &calB, &calC, &offA, &offB, &offC);
   current_sensor_get_range_profile(&rngLowMax, &rngMidMax, &rngLowOff, &rngMidOff);
   if (server.hasArg("lInt")) {
@@ -2485,6 +2538,17 @@ static void handleCalibApply() {
       locationChanged = true;
     }
   }
+  if (server.hasArg("userCss")) {
+    String requested = server.arg("userCss");
+    requested.replace("\r", "");
+    if (requested.length() > kMaxUserScreenCssLen) {
+      requested.remove(kMaxUserScreenCssLen);
+    }
+    if (requested != s_userScreenCustomCss) {
+      s_userScreenCustomCss = requested;
+      userCssChanged = true;
+    }
+  }
   current_sensor_set_calibration(calA, calB, calC, offA, offB, offC);
   current_sensor_set_range_profile(rngLowMax, rngMidMax, rngLowOff, rngMidOff);
   if (locationChanged) {
@@ -2492,6 +2556,9 @@ static void handleCalibApply() {
   }
   if (locationChanged || stationNameChanged) {
     saveLocationSettings();
+  }
+  if (userCssChanged) {
+    saveUserScreenCssSetting();
   }
   server.send(200, "text/plain", "OK");
   noteHttpResponseSent();
@@ -2537,6 +2604,7 @@ void web_init() {
   loadWifiSettings();
   loadCurrentLimitSetting();
   loadLocationSettings();
+  loadUserScreenCssSetting();
   setupWiFi();
   setupArduinoOta();
   pinMode(MOSFET_RESET_PIN, OUTPUT);
