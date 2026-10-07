@@ -1,0 +1,528 @@
+<!DOCTYPE html><html lang="tr"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0c425e">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RTSBOX EVSE"><meta name="format-detection" content="telephone=no">
+<title>RTSBOX · EVSE Yönetim</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%230c425e'/><path d='M14 44V20h14a8 8 0 0 1 0 16h-6l10 8' fill='none' stroke='%23fff' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/><circle cx='46' cy='22' r='6' fill='%23ff5a1f'/><circle cx='46' cy='42' r='6' fill='%2300b2ff'/></svg>">
+<style>
+:root{--lacivert:#0c425e;--turuncu:#ff5a1f;--mavi:#00b2ff;--zemin:#f3f6f8;--yuzey:#fff;--kenar:#d5dee5;--metin:#14212b;--soluk:#4d5f6d;--iyi:#11703f;--iyi-z:#e2f5ea;--kotu:#b3261e;--kotu-z:#fbe6e4;--uyari:#8a5a00;--uyari-z:#fff3d6;--dugme:#0c425e;--dugme-metin:#fff;--odak:#ff5a1f;--kod:#f0f3f6;--vurgu:#0c425e;--tab:64px;--st:env(safe-area-inset-top);--sb:env(safe-area-inset-bottom);--sl:env(safe-area-inset-left);--sr:env(safe-area-inset-right)}
+@media(prefers-color-scheme:dark){:root{--zemin:#0b1a24;--yuzey:#11283a;--kenar:#24435a;--metin:#e7eef3;--soluk:#a9bccb;--iyi:#5fd896;--iyi-z:#123526;--kotu:#ff8a80;--kotu-z:#3a1a1a;--uyari:#ffc760;--uyari-z:#3a2c0e;--dugme:#00b2ff;--dugme-metin:#06141d;--kod:#0a1720;--vurgu:#00b2ff}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;font-size:16px}
+@supports(font:-apple-system-body){html{font:-apple-system-body}}
+body{margin:0;background:var(--zemin);color:var(--metin);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:.94rem;line-height:1.5;overscroll-behavior-y:none}
+[hidden]{display:none!important}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--odak);outline-offset:2px}
+button,a.nav,.seg button{touch-action:manipulation;user-select:none;-webkit-user-select:none}
+button{font:inherit;font-weight:600;cursor:pointer;min-height:44px;border-radius:8px;padding:8px 16px;border:1px solid transparent;background:var(--dugme);color:var(--dugme-metin)}
+button.ik{background:transparent;color:var(--metin);border-color:var(--kenar)}
+button.th{background:transparent;color:var(--kotu);border-color:var(--kotu)}
+button.thd{background:var(--kotu);color:#fff}
+@media(prefers-color-scheme:dark){button.thd{color:#1a0505}}
+button.iy{background:var(--iyi);color:#fff}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,select,textarea{font:inherit;font-size:max(16px,1rem);width:100%;min-height:44px;padding:9px 11px;border:1px solid var(--kenar);border-radius:8px;background:var(--zemin);color:var(--metin)}
+textarea{min-height:160px;font-family:ui-monospace,Consolas,monospace;font-size:max(16px,.85rem);resize:vertical}
+input[type=checkbox]{width:22px;min-height:22px;height:22px;accent-color:var(--vurgu);vertical-align:middle;margin:0 8px 0 0}
+label{display:block;font-weight:600;font-size:.85rem;margin:0 0 4px;color:var(--soluk)}
+label.ck{display:flex;align-items:center;min-height:44px;color:var(--metin);font-weight:500}
+.mono,.v{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+.lg{width:34px;height:34px;flex:none}
+.marka{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.04em}
+.marka small{display:block;font-weight:400;letter-spacing:0;opacity:.85;font-size:.75rem}
+/* giris */
+.giris-kap{min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:calc(16px + var(--st)) calc(16px + var(--sr)) calc(16px + var(--sb)) calc(16px + var(--sl))}
+.giris{width:100%;max-width:380px;background:var(--yuzey);border:1px solid var(--kenar);border-top:4px solid var(--turuncu);border-radius:14px;padding:24px}
+.giris h1{font-size:1.3rem;margin:16px 0 12px}
+.giris .alan{margin-top:12px}
+.pw{display:flex;gap:6px}.pw input{flex:1}.pw button{flex:none;min-width:72px}
+.giris button[type=submit]{width:100%;margin-top:16px}
+.mesaj{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:.88rem}
+.mesaj.kotu{background:var(--kotu-z);color:var(--kotu)}.mesaj.iyi{background:var(--iyi-z);color:var(--iyi)}.mesaj.uyari{background:var(--uyari-z);color:var(--uyari)}
+/* ust bar */
+header.ust{position:sticky;top:0;z-index:15;background:var(--lacivert);color:#fff;border-bottom:3px solid var(--turuncu);padding:var(--st) var(--sr) 0 var(--sl)}
+.ust-ic{display:flex;align-items:center;gap:10px;padding:8px 12px;min-height:56px}
+.ust .marka span{display:none}
+.ist{flex:1;min-width:0;line-height:1.25;user-select:text;-webkit-user-select:text}
+.ist b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:1rem}
+.ist small{font:.78rem ui-monospace,Consolas,monospace;opacity:.85}
+.ust button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.55);padding:6px 12px}
+.ust button.ic{width:44px;padding:0;font-size:1.3rem}
+.spin{animation:sp .8s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+#netStrip{padding:8px calc(12px + var(--sr)) 8px calc(12px + var(--sl));font-size:.85rem;font-weight:600;text-align:center}
+#netStrip.kotu{background:var(--kotu-z);color:var(--kotu)}#netStrip.iyi{background:var(--iyi-z);color:var(--iyi)}#netStrip.uyari{background:var(--uyari-z);color:var(--uyari)}
+/* gezinme: mobilde alt sekme, genis ekranda yan menu */
+#navCard{position:fixed;left:0;right:0;bottom:0;z-index:14;display:flex;background:var(--yuzey);border-top:1px solid var(--kenar);padding:0 var(--sr) var(--sb) var(--sl)}
+a.nav{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:var(--tab);text-decoration:none;color:var(--soluk);font-size:.7rem;font-weight:600;border-top:3px solid transparent}
+a.nav svg{width:24px;height:24px}
+a.nav.active{color:var(--vurgu);border-top-color:var(--turuncu)}
+a.nav.yan{display:none}
+main{padding:16px calc(12px + var(--sr)) calc(var(--tab) + var(--sb) + 24px) calc(12px + var(--sl));max-width:1240px}
+@media(min-width:900px){
+.ust .marka span{display:block}
+.ust-ic{padding:8px 20px}
+.app{display:grid;grid-template-columns:220px 1fr}
+#navCard{position:sticky;top:calc(59px + var(--st));align-self:start;height:calc(100vh - 59px - var(--st));flex-direction:column;border-top:0;border-right:1px solid var(--kenar);padding:12px 8px;gap:2px}
+a.nav{flex:none;flex-direction:row;justify-content:flex-start;gap:12px;padding:0 14px;min-height:46px;font-size:.92rem;border-top:0;border-left:3px solid transparent;border-radius:0 8px 8px 0}
+a.nav.active{border-left-color:var(--turuncu);background:var(--kod)}
+a.nav.yan{display:flex}
+main{padding:20px 24px 40px}}
+@media(hover:hover){a.nav:hover{background:var(--kod)}button:hover{filter:brightness(1.08)}}
+/* icerik */
+.sec{display:none}.sec.on{display:block}
+.bas{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+.bas h1{font-size:1.35rem;margin:0;flex:1}
+.izgara{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.genis{grid-column:1/-1}
+.kart{background:var(--yuzey);border:1px solid var(--kenar);border-radius:12px;padding:16px;min-width:0}
+.kart h2{margin:0 0 10px;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soluk);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kart h2 .s{margin-left:auto}
+.rozet{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.78rem;font-weight:700;background:var(--kod);color:var(--soluk);letter-spacing:0;text-transform:none}
+.rozet.iyi{background:var(--iyi-z);color:var(--iyi)}.rozet.kotu{background:var(--kotu-z);color:var(--kotu)}.rozet.uyari{background:var(--uyari-z);color:var(--uyari)}
+.hero{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.st{display:flex;align-items:center;gap:14px;flex:1;min-width:230px}
+.stL{width:60px;height:60px;border-radius:12px;display:grid;place-items:center;font-size:2rem;font-weight:800;background:var(--kod);color:var(--soluk);flex:none}
+.stL.C,.stL.D{background:var(--iyi-z);color:var(--iyi)}.stL.B{background:var(--kod);color:var(--vurgu);box-shadow:inset 0 0 0 2px var(--mavi)}.stL.E,.stL.F{background:var(--kotu-z);color:var(--kotu)}
+.stT{font-size:1.15rem;font-weight:700}.stS{color:var(--soluk);font-size:.82rem}
+.seg{display:flex;width:100%;max-width:420px;background:var(--kod);border:1px solid var(--kenar);border-radius:10px;padding:3px;gap:3px}
+.seg button{flex:1;background:transparent;color:var(--soluk);padding:6px 8px;font-size:.85rem}
+.seg button.on{background:var(--dugme);color:var(--dugme-metin)}.seg button.on.dur{background:var(--kotu);color:#fff}
+.alarm{margin-top:12px;padding:10px 12px;border-radius:8px;font-weight:600;border-left:4px solid}
+.alarm.l1{background:var(--uyari-z);color:var(--uyari)}.alarm.l2{background:var(--kotu-z);color:var(--kotu)}
+.kpi .big{font-size:2.6rem;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;margin:2px 0;overflow-wrap:anywhere}
+.kpi .big u{text-decoration:none;font-size:1rem;color:var(--soluk);font-weight:600;margin-left:4px}
+.kpi .alt{font-size:.8rem;color:var(--soluk)}
+.mt{height:8px;border-radius:9px;background:var(--kod);overflow:hidden;margin-top:10px}
+.mt i{display:block;height:100%;width:0;background:var(--mavi);transition:width .6s}
+.ph{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:10px;margin:12px 0}
+.ph b{font-size:.8rem;color:var(--soluk)}.ph .mt{margin:0;height:14px}
+.ph .v{font-size:1.25rem;font-weight:800;min-width:76px;text-align:right}
+dl.bilgi{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;margin:0;font-size:.9rem}
+dl.bilgi dt{color:var(--soluk)}dl.bilgi dd{margin:0;text-align:right;font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere}
+.f{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px;margin-bottom:12px}
+.u{position:relative}.u em{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-style:normal;font-size:.8rem;color:var(--soluk);pointer-events:none}.u input{padding-right:36px}
+.not{font-size:.85rem;color:var(--soluk);margin:0 0 12px}
+.satir{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.kaydet{position:sticky;bottom:calc(var(--tab) + var(--sb) + 8px);z-index:5;margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:var(--lacivert);color:#fff;border-bottom:3px solid var(--turuncu)}
+.kaydet span{flex:1;font-size:.85rem;opacity:.85}.kaydet span.kirli{opacity:1;font-weight:700;color:#ffb38f}
+.kaydet button.ik{color:#fff;border-color:rgba(255,255,255,.55)}
+@media(min-width:900px){.kaydet{bottom:12px}}
+.wl{display:flex;flex-direction:column;gap:6px}
+.wi{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--kenar);border-radius:8px;background:var(--zemin)}
+.wi .n{flex:1;font-weight:600;overflow-wrap:anywhere}.wi .s{font-size:.75rem;color:var(--soluk)}
+.sig{display:inline-flex;align-items:flex-end;gap:2px}.sig i{width:4px;background:var(--kenar);border-radius:1px}.sig i.on{background:var(--iyi)}
+.ver{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;text-align:center;margin-bottom:14px}
+.ver>div{padding:12px 8px;border-radius:10px;background:var(--kod);border:1px solid var(--kenar)}
+.ver small{display:block;font-size:.7rem;font-weight:700;color:var(--soluk);letter-spacing:.06em}
+.ver b{display:block;font:800 1.4rem ui-monospace,Consolas,monospace;margin-top:2px}
+.ver .ok{border:0;background:none;color:var(--soluk);font-size:1.3rem;padding:0}
+.ver .yeni{border-color:var(--turuncu);box-shadow:inset 0 0 0 1px var(--turuncu)}
+.tehlike{border:2px solid var(--kotu)}.tehlike h2{color:var(--kotu)}
+.dz{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--kenar)}
+.dz:last-child{border-bottom:0;padding-bottom:0}.dz p{margin:2px 0 0;font-size:.85rem;color:var(--soluk);max-width:520px}
+.tk{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--kenar);white-space:nowrap}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--soluk)}
+tr:last-child td{border-bottom:0}
+.ov{position:fixed;inset:0;z-index:30;background:rgba(6,20,29,.6);display:flex;align-items:flex-end;justify-content:center;padding:16px calc(16px + var(--sr)) calc(16px + var(--sb)) calc(16px + var(--sl))}
+@media(min-width:600px){.ov{align-items:center}}
+.dlg{background:var(--yuzey);border-radius:14px;max-width:440px;width:100%;padding:20px;border-top:4px solid var(--turuncu)}
+.dlg.red{border-top-color:var(--kotu)}.dlg h3{margin:0 0 6px;font-size:1.1rem}.dlg p{margin:0 0 12px;color:var(--soluk);font-size:.9rem}
+.dlg .satir{justify-content:flex-end;margin-top:14px}
+#toast{position:fixed;left:50%;bottom:calc(var(--tab) + var(--sb) + 14px);transform:translateX(-50%);z-index:40;background:var(--lacivert);color:#fff;padding:10px 16px;border-radius:10px;font-size:.9rem;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;max-width:calc(100vw - 32px)}
+#toast.on{opacity:1}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="lg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#0c425e"/><path d="M14 44V20h14a8 8 0 0 1 0 16h-6l10 8" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="22" r="6" fill="#ff5a1f"/><circle cx="46" cy="42" r="6" fill="#00b2ff"/></symbol>
+<symbol id="iL" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+<symbol id="iS" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6M7 17h8"/></g></symbol>
+<symbol id="iC" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></g></symbol>
+<symbol id="iW" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 9a15 15 0 0 1 20 0M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0"/><circle cx="12" cy="20" r="1"/></g></symbol>
+<symbol id="iT" viewBox="0 0 24 24"><path d="M9 3v6l-5 9a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3l-5-9V3M8 3h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+<symbol id="iO" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 19h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</defs></svg>
+
+<!-- GIRIS: jeton yoksa yalnizca bu gorunur -->
+<main class="giris-kap" id="loginView">
+<form class="giris" id="loginForm" autocomplete="on">
+  <div class="marka"><svg class="lg"><use href="#lg"/></svg><span>RTSBOX<small>Rotosis EVSE yönetim paneli</small></span></div>
+  <h1>Yönetici girişi</h1>
+  <div class="alan"><label for="lgUser">Kullanıcı adı</label><input id="lgUser" name="username" value="admin" readonly autocomplete="username"></div>
+  <div class="alan"><label for="lgPass">Parola</label><div class="pw"><input id="lgPass" name="password" type="password" required autocomplete="current-password" maxlength="64" autocapitalize="off" spellcheck="false"><button type="button" class="ik" onclick="togglePw('lgPass',this)">Göster</button></div></div>
+  <div class="mesaj" id="lgMsg" role="alert" hidden></div>
+  <button type="submit" id="lgBtn">Giriş</button>
+  <p class="not" style="margin:12px 0 0" id="lgInfo">5 hatalı denemeden sonra giriş geçici olarak kilitlenir.</p>
+</form>
+</main>
+
+<!-- PANEL: girisle acilir -->
+<div id="appView" hidden>
+<header class="ust"><div class="ust-ic">
+  <div class="marka"><svg class="lg"><use href="#lg"/></svg><span>RTSBOX<small>Rotosis EVSE yönetim paneli</small></span></div>
+  <div class="ist" title="Dokun: IP'yi kopyala" onclick="copyIp()"><b id="stationTitle">-</b><small><span id="ipTop">-</span> · <span id="hostTop">-</span></small></div>
+  <button class="ic" id="refreshBtn" onclick="refreshAll()" aria-label="Yenile">&#8635;</button>
+  <button onclick="logout()">Çıkış</button>
+</div></header>
+<div id="netStrip" role="status" aria-live="polite" hidden></div>
+
+<div class="app">
+<nav id="navCard" aria-label="Ana menü">
+  <a class="nav" id="navAdmin" href="#live" data-s="liveCard"><svg><use href="#iL"/></svg>Canlı</a>
+  <a class="nav" id="navStatus" href="#status" data-s="statusCard"><svg><use href="#iS"/></svg>Durum</a>
+  <a class="nav" id="navCalibration" href="#settings" data-s="calibrationCard"><svg><use href="#iC"/></svg>Ayarlar</a>
+  <a class="nav" id="navWifi" href="#wifi" data-s="wifiCard"><svg><use href="#iW"/></svg>Wi-Fi</a>
+  <a class="nav yan" id="navTest" href="#test" data-s="testCard"><svg><use href="#iT"/></svg>Test</a>
+  <a class="nav" id="navOta" href="#ota" data-s="otaCard"><svg><use href="#iO"/></svg>Yazılım</a>
+</nav>
+<main id="icerik">
+
+<!-- CANLI -->
+<section class="sec" id="liveCard">
+<div class="izgara">
+  <div class="kart genis">
+    <div class="hero">
+      <div class="st"><div class="stL" id="stBox">-</div><div><div class="stT" id="stTxt">-</div><div class="stS"><span id="badgeState">STATE:-</span> · Ham <span id="sRawTop">-</span> · Mod <span id="modeTxt">-</span> · <span id="badgeRelay">R: -</span></div></div></div>
+      <div class="seg" id="modeSeg"><button data-m="0" onclick="chargeCmd(0)">Otomatik</button><button data-m="1" onclick="chargeCmd(1)">Başlat</button><button data-m="2" class="dur" onclick="chargeCmd(2)">Durdur</button></div>
+    </div>
+    <div class="alarm" id="alarmBox" hidden></div>
+  </div>
+  <div class="kart kpi"><h2>Anlık güç</h2><div class="big"><span id="pwr">-</span><u>kW</u></div><div class="alt">Tavan ≈ <span id="pMax">-</span> kW</div><div class="mt"><i id="pBar"></i></div></div>
+  <div class="kart kpi"><h2>Enerji</h2><div class="big"><span id="ekwh">-</span><u>kWh</u></div><div class="alt">Canlı seans <span id="sLiveKWh">-</span> kWh</div></div>
+  <div class="kart kpi"><h2>Süre</h2><div class="big"><span id="tsec">-</span></div><div class="alt">Faz <span id="phase">-</span> · Limit <span id="limitTxt">-</span> A</div></div>
+  <div class="kart">
+    <h2>Faz akımları <span class="s rozet" id="iAvgTag">ORT -</span></h2>
+    <div class="ph"><b>L1</b><div class="mt"><i id="b1"></i></div><span class="v"><span id="i1">-</span> A</span></div>
+    <div class="ph"><b>L2</b><div class="mt"><i id="b2"></i></div><span class="v"><span id="i2">-</span> A</span></div>
+    <div class="ph"><b>L3</b><div class="mt"><i id="b3"></i></div><span class="v"><span id="i3">-</span> A</span></div>
+  </div>
+  <div class="kart">
+    <h2>Control Pilot</h2>
+    <dl class="bilgi"><dt>State kararlı / ham</dt><dd><span id="sStb">-</span> / <span id="sRaw">-</span></dd><dt>CP yüksek / düşük</dt><dd><span id="cH">-</span> / <span id="cL">-</span></dd><dt>ADC yüksek / düşük</dt><dd><span id="aH">-</span> / <span id="aL">-</span></dd><dt>Röle</dt><dd id="rLbl">-</dd></dl>
+  </div>
+</div>
+</section>
+
+<!-- DURUM -->
+<section class="sec" id="statusCard">
+<div class="izgara">
+  <div class="kart" id="displayPanel"><h2>Ağ ve cihaz <span class="s rozet" id="connTag">-</span></h2>
+    <dl class="bilgi"><dt>Wi-Fi</dt><dd><span id="wifiSsid">-</span> (<span id="wifiLoc">-</span>)</dd><dt>IP</dt><dd id="ip">-</dd><dt>Host</dt><dd id="host">-</dd><dt>MAC</dt><dd id="mac">-</dd><dt>İstasyon kodu</dt><dd id="stationCode">-</dd><dt>Adres</dt><dd id="stationAddr">-</dd><dt>Son güncelleme</dt><dd id="lastUpd">-</dd></dl></div>
+  <div class="kart"><h2>Sıfırlama geçmişi</h2>
+    <dl class="bilgi"><dt>Toplam</dt><dd id="rstTotal">0</dd><dt>Anlık / geçmiş</dt><dd><span id="rstNow">0</span> / <span id="rstHist">0</span></dd><dt>Son işlem</dt><dd><span id="rstLastMode">YOK</span> @ <span id="rstLastSec">0</span>s</dd><dt>Firmware</dt><dd id="fwSmall">-</dd></dl></div>
+  <div class="kart genis"><h2>Son şarj seansları <button class="s ik" onclick="loadHistory()">Yenile</button></h2>
+    <div class="tk"><table><thead><tr><th>#</th><th>Başlangıç</th><th>Süre</th><th>Enerji</th><th>Ort. güç</th><th>Faz</th></tr></thead><tbody id="histBody"><tr><td colspan="6">-</td></tr></tbody></table></div></div>
+  <div class="kart genis"><h2>Kullanıcı ekranı özel CSS</h2>
+    <p class="not">Kullanıcı ekranındaki tüm öğeleri ezebilir. Örnek: <code>.metricCard{border-radius:36px}</code></p>
+    <textarea id="userCssSet" spellcheck="false" autocapitalize="off">__USER_CSS_TEXT__</textarea>
+    <div class="satir" style="margin-top:10px"><button onclick="applyUserCss()">CSS kaydet</button><button class="ik" onclick="window.open('/','_blank')">Kullanıcı ekranını aç</button></div></div>
+</div>
+</section>
+
+<!-- AYARLAR (kalibrasyon + istasyon + guvenlik) -->
+<section class="sec" id="calibrationCard">
+<div class="izgara" id="calForm">
+  <div class="kart"><h2>Zamanlama ve limit</h2><div class="f" data-f="lInt|Döngü|ms;stb|Stable count;onD|Röle açma|ms;offD|Röle bırakma|ms;limitASet|Akım limiti 6-32|A"></div></div>
+  <div class="kart"><h2>CP kalibrasyon</h2><div class="f" data-f="div|Divider;thb|TH_B|V;thc|TH_C|V;thd|TH_D|V;the|TH_E|V"></div></div>
+  <div class="kart genis"><h2>Akım kalibrasyonu</h2>
+    <p class="not">Varsayılan: 0-10 A için Ical 12.0; 10-30 A için ek offset 1.0 A. Tavsiye: rngLowMax 10, rngLowOff 0, rngMidMax 30, rngMidOff 1.</p>
+    <div class="f" data-f="icalA|Ical L1;icalB|Ical L2;icalC|Ical L3;ioffA|Offset L1|A;ioffB|Offset L2|A;ioffC|Offset L3|A;rngLowMax|0-10A maks.|A;rngLowOff|0-10A offset|A;rngMidMax|10-30A maks.|A;rngMidOff|10-30A offset|A"></div></div>
+  <div class="kart genis"><h2>Pens ampermetre yardımı <span class="s rozet">Canlı <span id="liveIa">-</span> / <span id="liveIb">-</span> / <span id="liveIc">-</span> · ort <span id="liveIAvg">-</span> A</span></h2>
+    <p class="not">1) 0-10 A'de pens değerlerini girip "Ical doldur". 2) 10-30 A'de girip "Offset doldur". 3) Alttan Uygula.</p>
+    <div class="f" data-f="clampLowA|Pens düşük L1;clampLowB|Pens düşük L2;clampLowC|Pens düşük L3"><div><label>&nbsp;</label><button class="ik" style="width:100%" onclick="fillClampLow()">Ical doldur</button></div></div>
+    <div class="f" data-f="clampMidA|Pens orta L1;clampMidB|Pens orta L2;clampMidC|Pens orta L3"><div><label>&nbsp;</label><button class="ik" style="width:100%" onclick="fillClampMid()">Offset doldur</button></div></div></div>
+  <div class="kart genis"><h2>İstasyon</h2><div class="f">
+    <div><label for="stationNameSet">İstasyon adı</label><input id="stationNameSet" placeholder="Boşsa MAC'ten otomatik"></div>
+    <div><label for="mapLat">Enlem</label><input id="mapLat" inputmode="decimal" placeholder="37.94559"></div>
+    <div><label for="mapLng">Boylam</label><input id="mapLng" inputmode="decimal" placeholder="32.58082"></div></div>
+    <dl class="bilgi"><dt>Üretilen adres</dt><dd id="stationAddr2">-</dd></dl></div>
+</div>
+<div class="kaydet"><span id="calDirty">Değişiklik yok</span><button class="ik" onclick="pull(true)">Geri al</button><button onclick="applyCal()">Uygula</button></div>
+
+<div class="izgara" style="margin-top:14px">
+  <div class="kart"><h2>Panel parolası</h2>
+    <form id="pwForm" autocomplete="off">
+      <input type="text" name="username" value="admin" autocomplete="username" hidden>
+      <div class="f" style="grid-template-columns:1fr">
+        <div><label for="pwCur">Mevcut parola</label><input id="pwCur" type="password" required autocomplete="current-password"></div>
+        <div><label for="pwNew">Yeni parola (en az 10 karakter)</label><input id="pwNew" type="password" required minlength="10" maxlength="64" autocomplete="new-password"></div>
+        <div><label for="pwNew2">Yeni parola (tekrar)</label><input id="pwNew2" type="password" required minlength="10" maxlength="64" autocomplete="new-password"></div>
+      </div>
+      <div class="satir"><button type="submit">Parolayı değiştir</button><button type="button" class="ik" onclick="togglePw('pwNew',this);togglePw('pwNew2');togglePw('pwCur')">Göster</button></div>
+      <div class="mesaj" id="pwMsg" role="status" hidden></div>
+    </form></div>
+  <div class="kart"><h2>Oturum</h2>
+    <dl class="bilgi"><dt>Kullanıcı</dt><dd>admin</dd><dt>Otomatik çıkış</dt><dd><span id="idleLeft">15:00</span> sonra</dd></dl>
+    <div class="satir" style="margin-top:12px"><button class="ik" onclick="location.hash='test'">Servis testleri</button><button class="th" onclick="logout()">Çıkış yap</button></div></div>
+</div>
+</section>
+
+<!-- WIFI -->
+<section class="sec" id="wifiCard">
+<div class="izgara">
+  <div class="kart"><h2>Bağlantı profili</h2>
+    <div class="mesaj uyari" style="margin:0 0 12px"><div id="wifiConnectedInfo">Mevcut bağlantı: bağlı değil</div><div id="wifiCurrentMode">Bağlantı profili: varsayılan liste</div></div>
+    <label class="ck"><input type="checkbox" id="wifiEnabled">Özel profil etkin</label>
+    <div class="f">
+      <div><label for="wifiSsidCfg">SSID</label><input id="wifiSsidCfg" autocapitalize="off" spellcheck="false"></div>
+      <div><label for="wifiPassCfg">Şifre</label><input id="wifiPassCfg" type="password" placeholder="Değişmeyecekse boş" autocomplete="new-password"></div>
+      <div><label for="wifiModeCfg">IP modu</label><select id="wifiModeCfg" onchange="toggleWifiModeFields()"><option value="dhcp">DHCP</option><option value="static">Statik</option></select></div>
+    </div>
+    <div id="wifiStaticFields" class="f" data-f="wifiIpCfg|IP||192.168.1.200;wifiGwCfg|Gateway||192.168.1.1;wifiSubnetCfg|Subnet||255.255.255.0;wifiDns1Cfg|DNS1||8.8.8.8;wifiDns2Cfg|DNS2||1.1.1.1"></div>
+    <button onclick="applyWifiSettings()">Kaydet ve bağlan</button></div>
+  <div class="kart"><h2>Çevredeki ağlar <button class="s ik" onclick="scanWifiList()">Tara</button></h2>
+    <p class="not" id="wifiScanStatus">Tarama hazır değil</p><div id="wifiScanList" class="wl"></div></div>
+</div>
+</section>
+
+<!-- TEST -->
+<section class="sec" id="testCard">
+<div class="bas"><h1>Servis testleri</h1><button class="ik" onclick="location.hash='settings'">Ayarlar'a dön</button></div>
+<div class="mesaj uyari" style="margin:0 0 14px"><b>Servis modu.</b> Bu komutlar otomatik akışa anında müdahale eder; araç bağlıyken dikkatli kullanın.</div>
+<div class="izgara">
+  <div class="kart"><h2>Röle <span class="s rozet" id="relayTag">-</span></h2>
+    <div class="satir"><button class="iy" onclick="send('/relay?on=1')">Manuel aç</button><button class="th" onclick="send('/relay?on=0')">Manuel bırak</button><button class="ik" onclick="send('/relay_auto?en=1')">Otomatiğe dön</button></div></div>
+  <div class="kart"><h2>MOSFET darbe testi</h2>
+    <div class="satir"><button class="th" onclick="send('/pulse_reset')">RESET (GPIO 7)</button><button class="iy" onclick="send('/pulse_set')">SET (GPIO 15)</button></div>
+    <p class="not" style="margin:10px 0 0">Her basış 100 ms HIGH darbe gönderir.</p></div>
+</div>
+</section>
+
+<!-- YAZILIM / OTA -->
+<section class="sec" id="otaCard">
+<div class="izgara">
+  <div class="kart"><h2>Yazılım güncelleme <span class="s rozet" id="otaTag">-</span></h2>
+    <div class="ver"><div><small>KURULU</small><b id="otaCurVer">-</b></div><div class="ok">&rarr;</div><div id="otaRemoteBox"><small>SUNUCUDA</small><b id="otaRemoteVer">-</b></div></div>
+    <div class="satir"><button class="ik" onclick="runOtaCheckAdmin()">Kontrol et</button><button id="otaInstallBtn" onclick="runOtaInstall()" disabled>Güncellemeyi yükle</button><button class="ik" onclick="location='/update'">.bin yükle</button></div>
+    <p class="not" style="margin:10px 0 0">Kontrol yalnızca yeni sürümü bulur; yükleme ayrıca onay ister, şarj durur ve cihaz yeniden başlar.</p></div>
+  <div class="kart"><h2>Teşhis</h2>
+    <dl class="bilgi"><dt>Çalışan bölüm</dt><dd id="otaPart">-</dd><dt>Image state</dt><dd id="otaImgState">-</dd><dt>Durum</dt><dd id="otaStatus">-</dd><dt>Son kontrol</dt><dd id="otaAge">-</dd><dt>Hata</dt><dd id="otaError">Hata yok</dd></dl></div>
+  <div class="kart genis tehlike"><h2>Tehlikeli bölge</h2>
+    <div class="dz"><div><b>Önceki OTA sürümüne dön</b><p>Aktif olmayan OTA bölümünü seçip yeniden başlatır.</p></div><button class="th" onclick="runBootPrev()">Önceki sürüme dön</button></div>
+    <div class="dz"><div><b>Fabrika yazılımına dön</b><p>USB ile yüklenen kurtarma (factory) sürümünü açar.</p></div><button class="thd" onclick="runBootFactory()">Fabrikaya dön</button></div>
+    <div class="dz"><div><b>Şarj verilerini sıfırla</b><p>Seçilen veriler kalıcı olarak silinir.</p>
+      <div class="satir"><label class="ck"><input type="checkbox" id="rstOptNow" checked>Anlık sayaç</label><label class="ck"><input type="checkbox" id="rstOptHist" checked>Seans geçmişi</label></div></div>
+      <button class="thd" onclick="runDataReset()">Verileri sıfırla</button></div>
+  </div>
+</div>
+</section>
+</main></div></div>
+
+<div class="ov" id="ov" hidden><div class="dlg" id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgT"><h3 id="dlgT"></h3><p id="dlgM"></p>
+<div id="dlgW"><label for="dlgI">Onay için <b id="dlgK"></b> yazın</label><input id="dlgI" autocomplete="off" autocapitalize="characters"></div>
+<div class="satir"><button class="ik" onclick="ask.close()">Vazgeç</button><button id="dlgOk">Onayla</button></div></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* Yetkili uc noktalar: /status /history /charge_cmd /calib_apply /wifi_scan /wifi_apply
+   /ota_check /ota_install /boot_prev /boot_factory /relay /relay_auto /pulse_reset /pulse_set
+   /data_reset /api/logout /api/password -> hepsi "Authorization: Bearer <jeton>" ister, yoksa 401.
+   Acik: /api/login (POST JSON {user,password} -> {token,ttl}; hatada 401 {left}, kilitte 429 {retryAfter}). */
+const PAGE_MODE="__PAGE_MODE__",IDLE_MS=15*60e3,MAX_TRY=5,LOCK_S=60,DEMO_PASS="rotosis123";
+let TOK=null,paused=false,t,last=null,calDirty=false,wifiDirty=false,fails=0,lastAct=Date.now(),idleWarned=false,tries=0,lockUntil=0,pollT=null,idleT=null;
+const $=id=>document.getElementById(id);
+/* Form alanlari data-f tanimindan uretilir: "id|Etiket|birim|ornek;..." (id'ler aynen korunur) */
+document.querySelectorAll('[data-f]').forEach(b=>{b.innerHTML=b.dataset.f.split(';').map(x=>{const[id,l,u,ph]=x.split('|'),i='<input id="'+id+'" inputmode="decimal"'+(ph?' placeholder="'+ph+'"':'')+'>';return'<div><label for="'+id+'">'+l+'</label>'+(u?'<div class="u">'+i+'<em>'+u+'</em></div>':i)+'</div>';}).join('')+b.innerHTML;});
+Object.assign($('limitASet'),{type:'number',min:6,max:32,step:1});
+function T(id,v){const e=$(id);if(e)e.textContent=v;}
+function num(v,f=0){const n=Number(v);return Number.isFinite(n)?n:f;}
+function toast(m){const e=$('toast');e.textContent=m;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2800);}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function p(){paused=true;clearTimeout(t);}
+function r(){clearTimeout(t);t=setTimeout(()=>{paused=false;},3000);}
+document.addEventListener('focusin',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))p();});
+document.addEventListener('focusout',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))r();});
+function togglePw(id,b){const e=$(id);e.type=e.type==='password'?'text':'password';if(b)b.textContent=e.type==='password'?'Göster':'Gizle';}
+
+/* --- Jeton deposu: sessionStorage, olmazsa bellek (WebView uyumu) --- */
+const SS={get(k){try{return sessionStorage.getItem(k);}catch(e){return null;}},set(k,v){try{v==null?sessionStorage.removeItem(k):sessionStorage.setItem(k,v);}catch(e){}}};
+const isDemo=()=>!!TOK&&TOK.indexOf('demo:')===0;
+
+/* --- Sahte veri (yalnizca taslak) --- */
+const MOCK={lInt:50,onD:300,offD:100,stable:5,cpHigh:6.02,cpLow:-11.94,adcHigh:1.742,adcLow:.118,stateRaw:"C",ia:15.8,ib:15.6,ic:16.1,iAvg:15.83,pW:10920,eKWh:7.412,tSec:2735,phase:3,rLbl:"SET",wifiSsid:"Rotosis_Ofis",wifiLoc:"Ofis",ip:"192.168.1.57",host:"rotosis-evse-a1b2.local",mac:"24:6F:28:A1:B2:C3",stationCode:"A1B2C3",stationName:"Rotosis Fabrika Otopark",stationAddr:"Konya / Selçuklu",wifiCfgEnabled:1,wifiCfgSsid:"Rotosis_Ofis",wifiCfgMode:"dhcp",wifiCfgIp:"0.0.0.0",wifiCfgGw:"0.0.0.0",wifiCfgSubnet:"255.255.255.0",wifiCfgDns1:"8.8.8.8",wifiCfgDns2:"1.1.1.1",state:"C",div:4,thb:10.5,thc:7.5,thd:4.5,the:1.5,icalA:12,icalB:12,icalC:12,ioffA:0,ioffB:0,ioffC:0,rngLowMax:10,rngMidMax:30,rngLowOff:0,rngMidOff:1,modeId:0,mode:"AUTO",limitA:16,limitTargetA:16,staOk:1,mapLat:37.94559,mapLng:32.58082,otaCur:"1.4.2",otaRemote:"1.5.0",otaPart:"ota_0",otaImgState:"VALID",otaStatus:"update_available",otaErr:"",otaAgeMs:94000,alarmLv:0,alarmTxt:"Sistem normal",sLive:1,sLiveKWh:7.412,rstTotal:3,rstNow:2,rstHist:1,rstLastSec:182340,rstLastMode:"NOW+HIST"};
+const MOCK_DATA={'/history':{items:[{s:1759650000,d:5400,e:14.82,p:9880,ph:3},{s:1759570000,d:2100,e:2.61,p:4470,ph:1},{s:1759480000,d:7260,e:21.05,p:10440,ph:3}]},'/wifi_scan':{items:[{ssid:"Rotosis_Ofis",rssi:-48},{ssid:"Rotosis_Atolye",rssi:-63},{ssid:"Misafir",rssi:-77},{ssid:"TP-Link_9F1C",rssi:-86}]}};
+function demoResp(u,o){const path=u.split('?')[0];let st=200,d={ok:1};
+  if(path==='/status'){const m=MOCK,j=()=>(Math.random()-.5)*.4;m.ia=+(15.8+j()).toFixed(2);m.ib=+(15.6+j()).toFixed(2);m.ic=+(16.1+j()).toFixed(2);m.iAvg=+((m.ia+m.ib+m.ic)/3).toFixed(2);m.pW=Math.round(m.iAvg*690);m.tSec+=3;m.eKWh=+(m.eKWh+m.pW/1.2e6).toFixed(3);m.sLiveKWh=m.eKWh;d=Object.assign({},m);}
+  else if(MOCK_DATA[path])d=MOCK_DATA[path];
+  else if(path==='/api/password'){const b=JSON.parse(o.body||'{}');if(b.current!==DEMO_PASS){st=403;d={error:'Mevcut parola hatalı'};}}
+  return Promise.resolve({ok:st<300,status:st,json:()=>Promise.resolve(d),text:()=>Promise.resolve(st<300?'OK':d.error)});}
+
+/* --- Yetkili istek katmani --- */
+function api(u,o={}){
+  if(isDemo())return demoResp(u,o);
+  o.cache='no-store';o.headers=Object.assign({},o.headers,{Authorization:'Bearer '+TOK});
+  return fetch(u,o).then(x=>{if(x.status===401){logout('Oturum sona erdi, tekrar giriş yapın.',true);throw new Error('Yetkisiz');}net(true);return x;},e=>{net(false);throw e;});
+}
+function getJSON(u){return api(u).then(x=>{if(!x.ok)throw new Error('HTTP '+x.status);return x.json();});}
+function call(u,o){return api(u,o).then(x=>x.text().then(s=>{if(!x.ok)throw new Error(s||('HTTP '+x.status));return s;}));}
+function send(u){call(u).then(()=>{toast('Komut gönderildi');pull(true);}).catch(e=>toast(e.message||'İstek başarısız'));}
+
+/* --- Baglanti seridi --- */
+function strip(cls,msg){const s=$('netStrip');s.className=cls;s.textContent=msg;s.hidden=!msg;}
+function net(ok){
+  if(ok){if(fails){strip('iyi','Bağlantı yeniden kuruldu');setTimeout(()=>{if(!fails)strip('', '');},2500);}fails=0;}
+  else{fails++;strip('kotu','Cihaza ulaşılamıyor · yeniden bağlanıyor… ('+fails+')');}
+}
+addEventListener('offline',()=>strip('kotu','Telefonun ağ bağlantısı yok'));
+addEventListener('online',()=>{strip('uyari','Ağ geri geldi, yenileniyor…');pull(true);});
+
+/* --- Giris / cikis --- */
+function lgMsg(cls,m){const e=$('lgMsg');e.className='mesaj '+cls;e.textContent=m;e.hidden=!m;}
+function lockTick(){const s=Math.ceil((lockUntil-Date.now())/1000),b=$('lgBtn');
+  if(s>0){b.disabled=true;b.textContent='Kilitli · '+s+' sn';lgMsg('kotu','Çok fazla hatalı deneme. '+s+' sn sonra tekrar deneyin.');setTimeout(lockTick,1000);}
+  else{b.disabled=false;b.textContent='Giriş';tries=0;lgMsg('','');SS.set('evseLock',null);}}
+function lock(sec){lockUntil=Date.now()+sec*1000;SS.set('evseLock',String(lockUntil));lockTick();}
+function loginFail(left){tries++;const k=left!=null?left:MAX_TRY-tries;if(k<=0){lock(LOCK_S);return;}
+  lgMsg(k<=2?'kotu':'uyari','Parola hatalı. Kalan deneme: '+k+(k<=2?' — sonra '+LOCK_S+' sn kilitlenir.':''));$('lgPass').select();}
+$('loginForm').addEventListener('submit',e=>{
+  e.preventDefault();if(lockUntil>Date.now())return;
+  const pw=$('lgPass').value,b=$('lgBtn');b.disabled=true;b.textContent='Kontrol ediliyor…';
+  const done=()=>{if(lockUntil<=Date.now()){b.disabled=false;b.textContent='Giriş';}};
+  fetch('/api/login',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:'admin',password:pw})})
+  .then(x=>x.json().catch(()=>({})).then(j=>{done();
+    if(x.ok&&j.token)startSession(j.token);
+    else if(x.status===429)lock(num(j.retryAfter,LOCK_S));
+    else loginFail(j.left);}))
+  .catch(()=>{done();/* cihaz yok: taslak demo dogrulamasi */ if(pw===DEMO_PASS)startSession('demo:'+Date.now());else loginFail();});
+});
+function startSession(tok){
+  TOK=tok;SS.set('evseTok',tok);tries=0;$('lgPass').value='';lgMsg('','');
+  $('loginView').hidden=true;$('appView').hidden=false;lastAct=Date.now();idleWarned=false;
+  if(isDemo())strip('uyari','DEMO: cihaz bulunamadı, sahte veri gösteriliyor');
+  applyPageMode();pull(true);
+  clearInterval(pollT);pollT=setInterval(()=>{if(!document.hidden)pull(false);},3000);
+  clearInterval(idleT);idleT=setInterval(idleCheck,1000);
+}
+function logout(msg,expired){
+  if(TOK&&!expired&&!isDemo())fetch('/api/logout',{method:'POST',headers:{Authorization:'Bearer '+TOK}}).catch(()=>{});
+  TOK=null;SS.set('evseTok',null);clearInterval(pollT);clearInterval(idleT);ask.close();
+  ['wifiPassCfg','pwCur','pwNew','pwNew2','lgPass'].forEach(i=>$(i).value='');
+  $('appView').hidden=true;$('loginView').hidden=false;strip('','');fails=0;
+  lgMsg(msg?'uyari':'',msg||'');setTimeout(()=>$('lgPass').focus(),50);
+}
+['pointerdown','keydown','touchstart'].forEach(ev=>addEventListener(ev,()=>{lastAct=Date.now();idleWarned=false;},{passive:true}));
+function idleCheck(){if(!TOK)return;const left=IDLE_MS-(Date.now()-lastAct);
+  if(left<=0){logout('15 dakika işlem yapılmadığı için çıkış yapıldı.');return;}
+  if(left<60e3&&!idleWarned){idleWarned=true;toast('1 dakika içinde otomatik çıkış yapılacak');}
+  T('idleLeft',fmtTime(left/1000));}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&TOK){idleCheck();if(TOK)pull(true);}});
+
+/* --- Onay diyalogu --- */
+const up=s=>s.trim().toLocaleUpperCase('tr').replace(/İ/g,'I');
+const ask={open(o){T('dlgT',o.t);T('dlgM',o.m);$('dlg').className='dlg'+(o.red?' red':'');$('dlgW').hidden=!o.w;T('dlgK',o.w||'');$('dlgI').value='';
+  const ok=$('dlgOk');ok.className=o.red?'thd':'';ok.textContent=o.ok||'Onayla';
+  ok.onclick=()=>{if(o.w&&up($('dlgI').value)!==up(o.w)){toast('Onay kelimesi hatalı');return;}ask.close();o.go();};
+  $('ov').hidden=false;if(o.w)setTimeout(()=>$('dlgI').focus(),50);},close(){$('ov').hidden=true;}};
+$('ov').addEventListener('click',e=>{if(e.target.id==='ov')ask.close();});
+
+/* --- Gezinme --- */
+const SECS=['liveCard','statusCard','calibrationCard','wifiCard','testCard','otaCard'];
+const HASH={live:'liveCard',admin:'liveCard',status:'statusCard',settings:'calibrationCard',calibration:'calibrationCard',wifi:'wifiCard',test:'testCard',ota:'otaCard'};
+function showPage(id){SECS.forEach(s=>$(s).classList.toggle('on',s===id));
+  document.querySelectorAll('a.nav').forEach(a=>a.classList.toggle('active',a.dataset.s===id||(id==='testCard'&&a.id==='navCalibration')));
+  if(id==='statusCard')loadHistory();scrollTo(0,0);}
+function applyPageMode(){const m=PAGE_MODE.indexOf('__')===0?'admin':PAGE_MODE;showPage(HASH[location.hash.slice(1)]||HASH[m]||'liveCard');}
+addEventListener('hashchange',()=>{if(TOK)applyPageMode();});
+function refreshAll(){const b=$('refreshBtn');b.classList.add('spin');pull(true);if($('statusCard').classList.contains('on'))loadHistory();setTimeout(()=>b.classList.remove('spin'),800);}
+function copyIp(){const ip=$('ipTop').textContent;if(navigator.clipboard&&ip!=='-')navigator.clipboard.writeText(ip).then(()=>toast('IP kopyalandı: '+ip),()=>{});}
+
+/* --- Bicimleyiciler --- */
+const ST={A:'Araç bağlı değil',B:'Araç bağlı, hazır',C:'Şarj oluyor',D:'Şarj (havalandırma)',E:'Hata: CP kısa devre',F:'Hata: EVSE arızası'};
+function fmtTime(s){s=Math.max(0,Math.floor(s));const h=Math.floor(s/3600),z=n=>String(n).padStart(2,'0');return(h?h+':':'')+z(Math.floor(s%3600/60))+':'+z(s%60);}
+function fmtOtaAge(ms){const s=Math.round(num(ms)/1000);return!s?'hemen şimdi':s<60?s+' sn önce':Math.floor(s/60)+' dk '+(s%60)+' sn önce';}
+function fmtDate(s){if(s<1e9)return s+' s';const d=new Date(s*1000);return d.toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
+function compareVersions(a,b){const pa=String(a||'').split('.').map(x=>parseInt(x,10)||0),pb=String(b||'').split('.').map(x=>parseInt(x,10)||0);for(let i=0;i<Math.max(pa.length,pb.length,4);i++){const x=pa[i]||0,y=pb[i]||0;if(x!==y)return x>y?1:-1;}return 0;}
+function setInput(id,v,force){const e=$(id);if(!e||v===undefined)return;if(document.activeElement===e&&!force)return;if(e.type==='checkbox')e.checked=!!v;else e.value=v;}
+
+/* --- Canli veri --- */
+const CAL=[['lInt','lInt'],['onD','onD'],['offD','offD'],['stb','stable'],['div','div'],['thb','thb'],['thc','thc'],['thd','thd'],['the','the'],['icalA','icalA'],['icalB','icalB'],['icalC','icalC'],['ioffA','ioffA'],['ioffB','ioffB'],['ioffC','ioffC'],['rngLowMax','rngLowMax'],['rngMidMax','rngMidMax'],['rngLowOff','rngLowOff'],['rngMidOff','rngMidOff'],['mapLat','mapLat'],['mapLng','mapLng']];
+function render(d,force){
+  last=d;const st=d.state||'-',lim=num(d.limitA,16)||16,ph=num(d.phase,1),kw=num(d.pW)/1000,kwMax=lim*230*ph/1000;
+  T('stationTitle',d.stationName||'RotosisEVSE');T('ipTop',d.ip||'-');T('hostTop',d.host||'-');T('lastUpd',new Date().toLocaleTimeString('tr-TR'));const ct=$('connTag');ct.className='s rozet '+(d.staOk?'iyi':'kotu');ct.textContent=d.staOk?'Wi-Fi bağlı':'Wi-Fi yok';
+  const sb=$('stBox');sb.textContent=st;sb.className='stL '+st;T('stTxt',ST[st]||'Bilinmiyor');
+  T('badgeState','STATE:'+st);T('sRawTop',d.stateRaw||'-');T('modeTxt',d.mode||'-');T('badgeRelay','R: '+(d.rLbl||'-'));
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('on',+b.dataset.m===num(d.modeId)));
+  const al=$('alarmBox');al.hidden=!(d.alarmLv>0);al.className='alarm l'+d.alarmLv;al.textContent=d.alarmTxt||'';
+  T('sStb',st);T('sRaw',d.stateRaw);T('cH',num(d.cpHigh).toFixed(2)+'V');T('cL',num(d.cpLow).toFixed(2)+'V');T('aH',num(d.adcHigh).toFixed(3)+'V');T('aL',num(d.adcLow).toFixed(3)+'V');
+  [['i1',d.ia,'b1'],['i2',d.ib,'b2'],['i3',d.ic,'b3']].forEach(a=>{const v=num(a[1]),b=$(a[2]);T(a[0],v.toFixed(2));b.style.width=Math.min(100,v/lim*100)+'%';b.style.background=v>lim+1?'var(--kotu)':'';});
+  T('pwr',kw.toFixed(2));T('pMax',kwMax.toFixed(1));$('pBar').style.width=Math.min(100,kw/kwMax*100)+'%';
+  T('ekwh',num(d.eKWh).toFixed(3));T('sLiveKWh',d.sLive?num(d.sLiveKWh).toFixed(3):'-');T('tsec',fmtTime(num(d.tSec)));T('phase',ph+'F');T('limitTxt',lim.toFixed(0));T('iAvgTag','ORT '+num(d.iAvg).toFixed(2)+' A');
+  T('rLbl',d.rLbl||'-');const rt=$('relayTag');rt.textContent=d.rLbl||'-';rt.className='s rozet '+(d.rLbl==='SET'?'iyi':'');
+  T('wifiSsid',d.wifiSsid||'-');T('wifiLoc',d.wifiLoc||'-');T('ip',d.ip||'-');T('host',d.host||'-');T('mac',d.mac||'-');T('stationCode',d.stationCode||'-');T('stationAddr',d.stationAddr||'-');T('stationAddr2',d.stationAddr||'-');
+  T('rstTotal',d.rstTotal||0);T('rstNow',d.rstNow||0);T('rstHist',d.rstHist||0);T('rstLastMode',d.rstLastMode||'YOK');T('rstLastSec',d.rstLastSec||0);
+  T('liveIa',num(d.ia).toFixed(2));T('liveIb',num(d.ib).toFixed(2));T('liveIc',num(d.ic).toFixed(2));T('liveIAvg',num(d.iAvg).toFixed(2));
+  renderOta(d);
+  if(!calDirty||force){CAL.forEach(a=>setInput(a[0],d[a[1]],force));setInput('limitASet',d.limitTargetA!==undefined?d.limitTargetA:d.limitA,force);setInput('stationNameSet',d.stationName||'',force);}
+  if(!wifiDirty||force)applyWifiStatus(d);
+  if(force){calDirty=false;wifiDirty=false;markCal();}
+}
+function pull(force=false){if(!TOK||(paused&&!force))return;getJSON('/status').then(d=>{if(TOK)render(d,force);}).catch(()=>{});}
+
+/* --- OTA ve tehlikeli islemler --- */
+function renderOta(d){T('otaCurVer',d.otaCur||'-');T('otaRemoteVer',d.otaRemote||'-');T('fwSmall',d.otaCur||'-');T('otaPart',d.otaPart||'-');T('otaImgState',d.otaImgState||'-');T('otaStatus',d.otaStatus||'-');T('otaAge',fmtOtaAge(d.otaAgeMs));T('otaError',d.otaErr?d.otaErr:'Hata yok');updateOtaInstallButton(d);}
+function updateOtaInstallButton(d){const has=compareVersions(d.otaRemote,d.otaCur)>0,er=!!d.otaErr,tg=$('otaTag'),b=$('otaInstallBtn');
+  b.disabled=!has;b.textContent=has?'Güncellemeyi yükle':'Güncel';$('otaRemoteBox').className=has?'yeni':'';
+  tg.className='s rozet '+(er?'kotu':has?'uyari':'iyi');tg.textContent=er?'Hata':has?'Yeni sürüm var':'Güncel';}
+function runOtaCheckAdmin(){call('/ota_check').then(()=>{T('otaStatus','check_requested');toast('Sunucu kontrol ediliyor');setTimeout(()=>pull(true),4000);}).catch(()=>toast('OTA kontrolü gönderilemedi'));}
+function runOtaInstall(){const cur=$('otaCurVer').textContent,rem=$('otaRemoteVer').textContent;
+  if(compareVersions(rem,cur)<=0){toast('Yüklenecek yeni sürüm yok');return;}
+  ask.open({t:'Güncelleme yüklensin mi?',m:cur+' → '+rem+'. Şarj durur, cihaz yeniden başlar; işlem bitene kadar gücü kesmeyin.',ok:'Yükle ve yeniden başlat',go:()=>call('/ota_install').then(()=>{T('otaStatus','install_requested');T('otaError','Admin onayı verildi, yükleme başlıyor');toast('Yükleme başladı');}).catch(()=>toast('OTA yükleme isteği gönderilemedi'))});}
+function runBootPrev(){ask.open({t:'Önceki sürüme dönülsün mü?',m:'Aktif olmayan OTA bölümü seçilip cihaz yeniden başlatılacak.',red:1,ok:'Geri dön',go:()=>call('/boot_prev').then(s=>toast(s||'Yeniden başlıyor')).catch(e=>toast(e.message))});}
+function runBootFactory(){ask.open({t:'Fabrika yazılımına dön',m:'Cihaz kurtarma sürümüyle açılacak; sonra OTA ile yeniden güncellemeniz gerekir.',w:'FABRİKA',red:1,ok:'Fabrikaya dön',go:()=>call('/boot_factory').then(s=>toast(s||'Yeniden başlıyor')).catch(e=>toast(e.message))});}
+function runDataReset(){const n=$('rstOptNow').checked,h=$('rstOptHist').checked;if(!n&&!h){toast('En az bir seçenek işaretleyin');return;}
+  ask.open({t:'Veriler silinsin mi?',m:'Silinecek: '+[n&&'anlık sayaç',h&&'seans geçmişi'].filter(Boolean).join(' + ')+'. Geri alınamaz.',w:'SIFIRLA',red:1,ok:'Sil',go:()=>call('/data_reset?now='+(+n)+'&hist='+(+h)).then(()=>{toast('Veriler sıfırlandı');pull(true);loadHistory();}).catch(()=>toast('Sıfırlama başarısız'))});}
+function chargeCmd(m){const go=()=>call('/charge_cmd?m='+m).then(()=>{toast(['Otomatik moda alındı','Şarj başlatıldı','Şarj durduruldu'][m]);pull(true);}).catch(()=>toast('Komut gönderilemedi'));
+  if(m===2)ask.open({t:'Şarj durdurulsun mu?',m:'Röle ve PWM hemen kapatılır.',red:1,ok:'Durdur',go});else go();}
+function loadHistory(){getJSON('/history').then(h=>{const it=(h.items||[]).slice().reverse();$('histBody').innerHTML=it.length?it.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+fmtDate(num(x.s))+'</td><td>'+fmtTime(num(x.d))+'</td><td>'+num(x.e).toFixed(2)+' kWh</td><td>'+(num(x.p)/1000).toFixed(1)+' kW</td><td>'+num(x.ph)+'F</td></tr>').join(''):'<tr><td colspan="6">Kayıt yok</td></tr>';}).catch(()=>{});}
+
+/* --- Ayarlar --- */
+function markCal(){const e=$('calDirty');e.textContent=calDirty?'Kaydedilmemiş değişiklik var':'Değişiklik yok';e.className=calDirty?'kirli':'';}
+$('calForm').addEventListener('input',e=>{if(!/^clamp/.test(e.target.id)){calDirty=true;markCal();}});
+function fillClamp(k){let c=0;['A','B','C'].forEach(ph=>{const ref=num($('clamp'+k+ph).value),live=num($('liveI'+ph).textContent);
+  if(k==='Low'&&ref>0&&live>.2){$('ical'+ph).value=(num($('ical'+ph).value,12)*ref/live).toFixed(2);c++;}
+  if(k==='Mid'&&ref>0&&live>0){$('ioff'+ph).value=(ref-live).toFixed(2);c++;}});
+  if(!c){toast('En az bir pens değeri girin ve canlı akım olsun');return;}calDirty=true;markCal();toast(k==='Low'?'Ical alanları dolduruldu':'Offset alanları dolduruldu');}
+function fillClampLow(){fillClamp('Low');}
+function fillClampMid(){fillClamp('Mid');}
+function applyCal(){const q=new URLSearchParams(),F={lInt:'lInt',onD:'onD',offD:'offD',s:'stb',limitA:'limitASet',div:'div',thb:'thb',thc:'thc',thd:'thd',the:'the',icalA:'icalA',icalB:'icalB',icalC:'icalC',ioffA:'ioffA',ioffB:'ioffB',ioffC:'ioffC',rngLowMax:'rngLowMax',rngMidMax:'rngMidMax',rngLowOff:'rngLowOff',rngMidOff:'rngMidOff',stationName:'stationNameSet',mapLat:'mapLat',mapLng:'mapLng',userCss:'userCssSet'};
+  for(const k in F)q.append(k,$(F[k]).value);const lim=num($('limitASet').value);if(lim<6||lim>32){toast('Akım limiti 6-32 A olmalı');return;}
+  if(document.activeElement)document.activeElement.blur();
+  call('/calib_apply?'+q).then(()=>{toast('Ayarlar uygulandı');calDirty=false;markCal();paused=false;pull(true);}).catch(()=>toast('Ayarlar kaydedilemedi'));}
+function applyUserCss(){const q=new URLSearchParams({userCss:$('userCssSet').value});call('/calib_apply?'+q).then(()=>toast('Kullanıcı ekranı CSS kaydedildi')).catch(()=>toast('CSS kaydedilemedi'));}
+$('pwForm').addEventListener('submit',e=>{e.preventDefault();const m=$('pwMsg'),say=(c,s)=>{m.className='mesaj '+c;m.textContent=s;m.hidden=false;},c=$('pwCur').value,n=$('pwNew').value;
+  if(n.length<10)return say('kotu','Yeni parola en az 10 karakter olmalı.');
+  if(n!==$('pwNew2').value)return say('kotu','Yeni parolalar eşleşmiyor.');
+  if(n===c)return say('kotu','Yeni parola mevcut paroladan farklı olmalı.');
+  api('/api/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current:c,new:n})})
+  .then(x=>x.json().catch(()=>({})).then(j=>{if(!x.ok)return say('kotu',j.error||'Parola değiştirilemedi.');
+    if(j.token){TOK=j.token;SS.set('evseTok',j.token);}['pwCur','pwNew','pwNew2'].forEach(i=>$(i).value='');say('iyi','Parola değiştirildi. Diğer oturumlar kapatıldı.');}))
+  .catch(()=>say('kotu','Cihaza ulaşılamadı.'));});
+
+/* --- Wi-Fi --- */
+$('wifiCard').addEventListener('input',()=>{wifiDirty=true;});
+function toggleWifiModeFields(){$('wifiStaticFields').hidden=$('wifiModeCfg').value!=='static';}
+function applyWifiStatus(d){setInput('wifiEnabled',!!d.wifiCfgEnabled,true);setInput('wifiSsidCfg',d.wifiCfgSsid||'',true);setInput('wifiModeCfg',d.wifiCfgMode||'dhcp',true);
+  ['Ip','Gw','Subnet','Dns1','Dns2'].forEach(k=>setInput('wifi'+k+'Cfg',d['wifiCfg'+k]||'',true));toggleWifiModeFields();
+  T('wifiCurrentMode',d.wifiCfgEnabled?'Bağlantı profili: '+(d.wifiCfgSsid||'-')+' / '+(d.wifiCfgMode||'dhcp').toUpperCase():'Bağlantı profili: varsayılan liste');
+  T('wifiConnectedInfo',d.wifiSsid&&d.wifiSsid!=='-'?'Mevcut bağlantı: '+d.wifiSsid+(d.wifiLoc&&d.wifiLoc!=='-'?' / '+d.wifiLoc:''):'Mevcut bağlantı: bağlı değil');}
+function bars(r){const n=r>-55?4:r>-67?3:r>-78?2:1;let s='<span class="sig" aria-label="'+n+'/4">';for(let i=1;i<=4;i++)s+='<i class="'+(i<=n?'on':'')+'" style="height:'+(i*3+3)+'px"></i>';return s+'</span>';}
+function renderWifiScanList(items){const h=$('wifiScanList');if(!items||!items.length){h.innerHTML='<p class="not">Tarama sonucu boş</p>';return;}
+  items.sort((a,b)=>b.rssi-a.rssi);h.innerHTML=items.map(it=>'<div class="wi">'+bars(num(it.rssi))+'<span class="n">'+esc(it.ssid||'(gizli)')+'</span><span class="s">'+num(it.rssi)+' dBm</span><button class="ik" type="button" onclick="pickWifiSsid('+esc(JSON.stringify(String(it.ssid||'')))+')">Seç</button></div>').join('');}
+function pickWifiSsid(s){$('wifiSsidCfg').value=s;$('wifiEnabled').checked=true;wifiDirty=true;$('wifiPassCfg').focus();}
+function scanWifiList(){T('wifiScanStatus','Tarama yapılıyor…');getJSON('/wifi_scan').then(d=>{renderWifiScanList(d.items||[]);T('wifiScanStatus','Tarama tamamlandı · '+(d.items||[]).length+' ağ');}).catch(()=>T('wifiScanStatus','Tarama başarısız'));}
+function applyWifiSettings(){const q=new URLSearchParams(),v=id=>$(id).value;
+  q.append('wifiEnabled',$('wifiEnabled').checked?'1':'0');q.append('wifiSsid',v('wifiSsidCfg'));q.append('wifiPass',v('wifiPassCfg'));q.append('wifiDhcp',v('wifiModeCfg')==='static'?'0':'1');
+  ['Ip','Gw','Subnet','Dns1','Dns2'].forEach(k=>q.append('wifi'+k,v('wifi'+k+'Cfg')));
+  ask.open({t:'Wi-Fi ayarları kaydedilsin mi?',m:'Cihaz yeni ağa bağlanmayı deneyecek. Yanlış ayarda panele erişim kesilebilir, IP değişebilir.',ok:'Kaydet',go:()=>call('/wifi_apply?'+q).then(()=>{toast('Kaydedildi, cihaz yeniden bağlanıyor');$('wifiPassCfg').value='';wifiDirty=false;pull(true);}).catch(()=>toast('Wi-Fi ayarları kaydedilemedi'))});}
+
+/* --- Acilis --- */
+lockUntil=num(SS.get('evseLock'));if(lockUntil>Date.now())lockTick();
+const saved=SS.get('evseTok');if(saved)startSession(saved);else $('lgPass').focus();
+</script>
+</body></html>

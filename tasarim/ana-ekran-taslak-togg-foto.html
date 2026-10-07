@@ -1,0 +1,358 @@
+<!DOCTYPE html><html lang="tr"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0c425e">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RotosisEVSE"><meta name="format-detection" content="telephone=no">
+<title>Rotosis Şarj İstasyonu</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/app-icon.svg" type="image/svg+xml">
+<style>
+:root{--lacivert:#0c425e;--turuncu:#ff5a1f;--mavi:#00b2ff;--zemin:#f3f6f8;--yuzey:#fff;--kenar:#d5dee5;--metin:#14212b;--soluk:#4d5f6d;--iyi:#11703f;--iyi-z:#e2f5ea;--kotu:#b3261e;--kotu-z:#fbe6e4;--uyari:#8a5a00;--uyari-z:#fff3d6;--bilgi:#00618c;--bilgi-z:#e0f3fc;--dugme:#0c425e;--dugme-metin:#fff;--odak:#ff5a1f;--kod:#f0f3f6;--arac:#1f5f80;--st:env(safe-area-inset-top);--sb:env(safe-area-inset-bottom);--sl:env(safe-area-inset-left);--sr:env(safe-area-inset-right)}
+@media(prefers-color-scheme:dark){:root{--zemin:#0b1a24;--yuzey:#11283a;--kenar:#24435a;--metin:#e7eef3;--soluk:#a9bccb;--iyi:#5fd896;--iyi-z:#123526;--kotu:#ff8a80;--kotu-z:#3a1a1a;--uyari:#ffc760;--uyari-z:#3a2c0e;--bilgi:#6fd3ff;--bilgi-z:#0c3047;--dugme:#00b2ff;--dugme-metin:#06141d;--kod:#0a1720;--arac:#4a8db3}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;font-size:16px}
+@supports(font:-apple-system-body){html{font:-apple-system-body}}
+body{margin:0;background:var(--zemin);color:var(--metin);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:1rem;line-height:1.45;overscroll-behavior-y:none}
+[hidden]{display:none!important}
+:focus-visible{outline:3px solid var(--odak);outline-offset:2px}
+a,button{touch-action:manipulation}
+.dugme,button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:10px 18px;border-radius:10px;border:1px solid transparent;background:var(--dugme);color:var(--dugme-metin);font:inherit;font-weight:700;text-decoration:none;cursor:pointer}
+.dugme.ik,button.ik{background:transparent;color:var(--metin);border-color:var(--kenar)}
+svg.i{width:1.5em;height:1.5em;flex:none}
+/* ust bar */
+header{background:var(--lacivert);color:#fff;border-bottom:3px solid var(--turuncu);padding:var(--st) var(--sr) 0 var(--sl)}
+.ust{display:flex;align-items:center;gap:12px;padding:10px 16px;min-height:60px;max-width:560px;margin:0 auto}
+.lg{width:36px;height:36px;flex:none}
+.ist{flex:1;min-width:0;line-height:1.25}
+.ist b{display:block;font-size:1.05rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ist small{display:block;font-size:.8rem;opacity:.85;overflow-wrap:anywhere}
+.canli{display:inline-flex;align-items:center;gap:6px;font-size:.75rem;font-weight:700;letter-spacing:.04em;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.5);flex:none}
+.canli::before{content:"";width:8px;height:8px;border-radius:50%;background:#8aa3b3}
+.canli.on::before{background:#5fd896}
+#netStrip{padding:10px calc(16px + var(--sr)) 10px calc(16px + var(--sl));font-size:.9rem;font-weight:600;text-align:center}
+#netStrip.uyari{background:var(--uyari-z);color:var(--uyari)}#netStrip.kotu{background:var(--kotu-z);color:var(--kotu)}
+main{max-width:560px;margin:0 auto;padding:16px calc(16px + var(--sr)) calc(24px + var(--sb)) calc(16px + var(--sl));display:grid;gap:14px}
+.kart{background:var(--yuzey);border:1px solid var(--kenar);border-radius:14px;padding:16px;min-width:0}
+.kart h2{margin:0 0 10px;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--soluk);display:flex;align-items:center;gap:8px}
+.kart h2 .s{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:600}
+.alarm{padding:12px 14px;border-radius:10px;font-weight:600;border-left:5px solid;display:flex;gap:10px;align-items:flex-start}
+.alarm.l1{background:var(--uyari-z);color:var(--uyari)}.alarm.l2{background:var(--kotu-z);color:var(--kotu)}
+/* durum karti: renk data-s ile */
+.durum{display:flex;align-items:center;gap:16px;padding:20px 18px;border-left:8px solid var(--soluk);--r:var(--soluk);--rz:var(--kod)}
+.durum[data-s=A]{--r:var(--soluk);--rz:var(--kod)}
+.durum[data-s=B]{--r:var(--bilgi);--rz:var(--bilgi-z)}
+.durum[data-s=C],.durum[data-s=D]{--r:var(--iyi);--rz:var(--iyi-z)}
+.durum[data-s=E],.durum[data-s=F]{--r:var(--kotu);--rz:var(--kotu-z)}
+.durum{border-left-color:var(--r);flex-wrap:wrap}
+/* arac gorseli */
+.arac{flex:1 1 100%;width:100%;height:auto;max-height:200px}
+.arac .zemin{stroke:var(--kenar);stroke-width:2}
+.arac .post{fill:var(--lacivert);stroke:var(--mavi);stroke-width:1.5}
+.arac .kab{fill:none;stroke:var(--soluk);stroke-width:3;stroke-linecap:round}
+.arac .fis{fill:var(--soluk)}
+.kaporta{fill:var(--arac);stroke:var(--arac);stroke-width:2;stroke-linejoin:round}
+.cam{fill:var(--zemin);opacity:.8}
+.ter{fill:#1b2730}.jant{fill:var(--kenar)}
+.port{fill:var(--soluk)}
+.etk{font-size:8px;font-weight:700;letter-spacing:.12em;fill:var(--soluk)}
+.akim{fill:none;stroke:var(--iyi);stroke-width:4;stroke-linecap:round;stroke-dasharray:1 11}
+.parilti{fill:var(--iyi)}
+.batt rect{fill:none;stroke:var(--iyi);stroke-width:2}.batt .bc{fill:var(--iyi)}
+.batt .bdol{fill:var(--iyi);stroke:none;transform-box:fill-box;transform-origin:left}
+.uyar path{fill:var(--kotu-z);stroke:var(--kotu);stroke-width:2;stroke-linejoin:round}.uyar .un{stroke-linecap:round}
+#aracGorsel,.kab,.fis,.akim,.parilti,.batt,.uyar,.kaporta,.cam,.port{transition:opacity .4s,fill .4s,stroke .4s}
+.kB,.akim,.parilti,.batt,.uyar{opacity:0}
+[data-s=A] #aracGorsel{opacity:.45}
+[data-s=A] .kaporta{fill:none;stroke:var(--soluk);stroke-dasharray:5 4}
+[data-s=A] .cam{opacity:0}
+.durum:not([data-s=A]) .kA{opacity:0}
+.durum:not([data-s=A]) .kB{opacity:1}
+[data-s=B] .kB{stroke:var(--mavi)}[data-s=B] .port{fill:var(--mavi)}
+:is([data-s=C],[data-s=D]) .kB{stroke:var(--iyi)}
+:is([data-s=C],[data-s=D]) .port{fill:var(--iyi);animation:nb 1.2s infinite}
+:is([data-s=C],[data-s=D]) .akim{opacity:1;animation:ak .8s linear infinite}
+:is([data-s=C],[data-s=D]) .parilti{opacity:.3;animation:nb 2.4s infinite}
+:is([data-s=C],[data-s=D]) .batt{opacity:1}
+:is([data-s=C],[data-s=D]) .bdol{animation:bd 3s ease-in-out infinite}
+:is([data-s=E],[data-s=F]) .kaporta{stroke:var(--kotu)}
+:is([data-s=E],[data-s=F]) .kB{stroke:var(--kotu)}
+:is([data-s=E],[data-s=F]) .port{fill:var(--kotu)}
+:is([data-s=E],[data-s=F]) .uyar{opacity:1;animation:nb 1s infinite}
+.sw{opacity:0;mix-blend-mode:screen}
+.swp{transform:translateX(-90px)}
+:is([data-s=C],[data-s=D]) .sw{opacity:.95}
+:is([data-s=C],[data-s=D]) .swp{animation:sw 2.2s ease-in-out infinite}
+:is([data-s=C],[data-s=D]) #aracGorsel{filter:drop-shadow(0 0 3px rgba(40,230,140,.85))}
+@keyframes sw{0%{transform:translateX(-90px)}100%{transform:translateX(250px)}}
+.swB,.swR{transition:opacity .4s;opacity:0;mix-blend-mode:screen}
+.durum[data-s=B] .swB{opacity:.9}
+:is(.durum[data-s=E],.durum[data-s=F]) .swR{opacity:.9}
+.durum[data-s=B] #aracGorsel{filter:drop-shadow(0 0 3px rgba(0,178,255,.9))}
+:is(.durum[data-s=E],.durum[data-s=F]) #aracGorsel{filter:drop-shadow(0 0 3px rgba(255,60,50,.9))}
+.durum[data-s=B] .swB{animation:nfB 3.2s ease-in-out infinite}
+:is(.durum[data-s=E],.durum[data-s=F]) .swR{animation:nfR 1.6s ease-in-out infinite}
+.durum[data-s=B] #aracGorsel{animation:hlB 3.2s ease-in-out infinite}
+:is(.durum[data-s=E],.durum[data-s=F]) #aracGorsel{animation:hlR 1.6s ease-in-out infinite}
+@keyframes nfB{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes nfR{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes hlB{0%,100%{filter:drop-shadow(0 0 1px rgba(0,178,255,.4))}50%{filter:drop-shadow(0 0 5px rgba(0,178,255,1))}}
+@keyframes hlR{0%,100%{filter:drop-shadow(0 0 1px rgba(255,60,50,.4))}50%{filter:drop-shadow(0 0 5px rgba(255,60,50,1))}}
+@keyframes ak{to{stroke-dashoffset:-24}}
+@keyframes bd{0%{transform:scaleX(.1)}85%,100%{transform:scaleX(1)}}
+.dIk{width:72px;height:72px;border-radius:18px;display:grid;place-items:center;background:var(--rz);color:var(--r);flex:none}
+.dIk svg{width:44px;height:44px}
+.durum[data-s=C] .dIk svg,.durum[data-s=D] .dIk svg{animation:nb 1.6s ease-in-out infinite}
+@keyframes nb{50%{opacity:.45}}
+.dT{font-size:1.45rem;font-weight:800;line-height:1.2;margin:0}
+.dA{color:var(--soluk);font-size:.95rem;margin:4px 0 0}
+/* canli sarj */
+.guc{font-size:3.4rem;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;margin:4px 0 14px;overflow-wrap:anywhere}
+.guc u,.kv u{text-decoration:none;font-size:1rem;font-weight:600;color:var(--soluk);margin-left:4px}
+.kvs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kv{background:var(--kod);border-radius:10px;padding:10px 12px}
+.kv small{display:block;font-size:.78rem;color:var(--soluk);font-weight:600}
+.kv b{font-size:1.35rem;font-variant-numeric:tabular-nums}
+.ph{display:grid;grid-template-columns:2.2em 1fr 4.6em;align-items:center;gap:10px;margin-top:12px}
+.ph span{font-size:.8rem;font-weight:700;color:var(--soluk)}
+.ph b{text-align:right;font-variant-numeric:tabular-nums}
+.mt{height:12px;border-radius:9px;background:var(--kod);overflow:hidden}
+.mt i{display:block;height:100%;width:0;background:var(--mavi);transition:width .6s}
+.lim{margin:14px 0 0;font-size:.88rem;color:var(--soluk)}
+/* QR yonlendirme */
+.qr{display:flex;gap:16px;align-items:center;border-top:4px solid var(--turuncu)}
+.qr svg.q{width:96px;height:96px;flex:none;color:var(--lacivert)}
+@media(prefers-color-scheme:dark){.qr svg.q{color:var(--mavi)}}
+.qr p{margin:0 0 12px;font-weight:600}
+.qr .dugme{width:100%}
+@media(max-width:360px){.qr{flex-direction:column;text-align:center}}
+dl{display:grid;grid-template-columns:1fr auto;gap:8px 12px;margin:0}
+dt{color:var(--soluk)}dd{margin:0;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.bos{color:var(--soluk);font-size:.92rem;margin:0;display:flex;gap:10px;align-items:center}
+footer{text-align:center;font-size:.82rem;color:var(--soluk);display:grid;gap:8px;justify-items:center}
+footer a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;color:var(--soluk)}
+/* DEMO:BASLA (yalnizca taslak) */
+.demo{border:2px dashed var(--turuncu);border-radius:12px;padding:10px;font-size:.8rem}
+.demo div{display:flex;gap:6px;margin-top:6px}
+.demo button{flex:1;min-height:44px;padding:4px;background:var(--kod);color:var(--metin)}
+.demo button.on{background:var(--turuncu);color:#111}
+/* DEMO:BITIR */
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* TASIRKEN: kullanici ozel CSS yer tutucusu (USER_CUSTOM_CSS) bu satirin yerine gelecek */
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="lg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#0c425e"/><path d="M14 44V20h14a8 8 0 0 1 0 16h-6l10 8" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="22" r="6" fill="#ff5a1f"/><circle cx="46" cy="42" r="6" fill="#00b2ff"/></symbol>
+<symbol id="sA" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0z"/><path d="M12 16v5" stroke-dasharray="2 2"/></g></symbol>
+<symbol id="sB" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0z"/><path d="M12 16v5"/><path d="m16 19 2 2 4-4"/></g></symbol>
+<symbol id="sC" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+<symbol id="sE" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/></g></symbol>
+<symbol id="iK" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></g></symbol>
+</defs></svg>
+
+<header><div class="ust">
+  <svg class="lg" role="img" aria-label="Rotosis"><use href="#lg"/></svg>
+  <div class="ist"><b id="stationName">Şarj istasyonu</b><small id="stationAddr">-</small></div>
+  <span class="canli" id="sync" role="status">BEKLİYOR</span>
+</div></header>
+<div id="netStrip" role="status" aria-live="polite" hidden></div>
+
+<main>
+  <div class="alarm l1" id="alarmBand" role="alert" hidden><svg class="i"><use href="#sE"/></svg><span id="alarmTxt"></span></div>
+
+  <section class="kart durum" id="stateCard" data-s="A" aria-live="polite">
+    <!-- Arac gorseli: ozgun Togg T10X tarzi siluet (resmi logo/gorsel DEGIL). Lisansli gorsel gelirse yalnizca g#aracGorsel degisir. -->
+    <svg class="arac" id="aracSvg" viewBox="0 0 320 122" role="img" aria-label="Araç görseli: araç bağlı değil"><defs><filter id="yF" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .25  0 0 0 0 1  0 0 0 0 .55  0 0 0 1 0"/></filter><linearGradient id="sG" x1="0" x2="1"><stop offset="0" stop-color="#000"/><stop offset=".5" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient><filter id="yB" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 .7  0 0 0 0 1  0 0 0 1 0"/></filter><filter id="yR" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 .22  0 0 0 0 .2  0 0 0 1 0"/></filter><mask id="sS" maskUnits="userSpaceOnUse" x="90" y="-10" width="240" height="130"><rect x="100" y="-10" width="218" height="130" fill="url(#sG)"/></mask><mask id="sM" maskUnits="userSpaceOnUse" x="90" y="-10" width="240" height="130"><rect class="swp" x="90" y="-10" width="90" height="130" fill="url(#sG)"/></mask></defs>
+      <ellipse class="parilti" cx="205" cy="106" rx="104" ry="6"/>
+      <path class="zemin" d="M4 105h312"/>
+      <rect class="post" x="10" y="26" width="24" height="79" rx="4"/><rect x="15" y="32" width="14" height="9" rx="1.5" fill="var(--mavi)"/><rect x="10" y="22" width="24" height="5" rx="2" fill="var(--turuncu)"/>
+      <path class="kab kA" d="M34 62c5 24 10 32 18 32"/><rect class="kA fis" x="49" y="91" width="9" height="7" rx="2"/>
+      
+      
+      <g id="aracGorsel"><image href="togg-arac.webp" x="100" y="-6" width="218" height="114" preserveAspectRatio="xMidYMax meet"/><circle class="port" cx="128" cy="62" r="3.5"/></g>
+      <g class="sw" mask="url(#sM)"><image filter="url(#yF)" href="togg-arac.webp" x="100" y="-6" width="218" height="114" preserveAspectRatio="xMidYMax meet"/></g>
+      <g class="swB" mask="url(#sS)"><image filter="url(#yB)" href="togg-arac.webp" x="100" y="-6" width="218" height="114" preserveAspectRatio="xMidYMax meet"/></g>
+      <g class="swR" mask="url(#sS)"><image filter="url(#yR)" href="togg-arac.webp" x="100" y="-6" width="218" height="114" preserveAspectRatio="xMidYMax meet"/></g>
+      <path class="kab kB" d="M34 62C52 96 96 96 128 65"/>
+      <path class="akim" d="M34 62C52 96 96 96 128 65"/>
+      
+      
+      <g class="batt"><rect x="276" y="6" width="30" height="15" rx="3"/><rect x="306" y="10" width="3" height="7" rx="1" class="bc"/><rect class="bdol" x="279" y="9" width="24" height="9" rx="1.5"/></g>
+      <g class="uyar"><path d="M292 4l14 24h-28z"/><path d="M292 12v8M292 23v1" class="un"/></g>
+    </svg>
+    <div class="dIk" aria-hidden="true"><svg><use id="stateIcon" href="#sA"/></svg></div>
+    <div><p class="dT" id="stateTitle">Araç bağlı değil</p><p class="dA" id="stateHint">Şarj kablosunu aracınıza takın.</p></div>
+  </section>
+
+  <section class="kart" id="liveCard" hidden>
+    <h2>Anlık güç<span class="s" id="phaseInfo">3 faz</span></h2>
+    <div class="guc"><span id="pwr">0,0</span><u>kW</u></div>
+    <div class="kvs">
+      <div class="kv"><small>Enerji</small><b id="ekwh">0,00</b><u>kWh</u></div>
+      <div class="kv"><small>Süre</small><b id="tsec">0 dk</b></div>
+    </div>
+    <div class="ph" id="ph1"><span>L1</span><div class="mt"><i id="b1"></i></div><b id="i1">0,0 A</b></div>
+    <div class="ph" id="ph2"><span>L2</span><div class="mt"><i id="b2"></i></div><b id="i2">0,0 A</b></div>
+    <div class="ph" id="ph3"><span>L3</span><div class="mt"><i id="b3"></i></div><b id="i3">0,0 A</b></div>
+    <p class="lim">Akım limiti: <b id="limitA">32</b> A</p>
+  </section>
+
+  <section class="kart qr" id="qrCard">
+    <svg class="q" viewBox="0 0 96 96" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"><path d="M6 26V6h20M70 6h20v20M90 70v20H70M26 90H6V70"/></g><g fill="currentColor" opacity=".8"><rect x="24" y="24" width="18" height="18" rx="2"/><rect x="54" y="24" width="18" height="18" rx="2"/><rect x="24" y="54" width="18" height="18" rx="2"/><rect x="56" y="56" width="6" height="6"/><rect x="66" y="56" width="6" height="6"/><rect x="56" y="66" width="6" height="6"/><rect x="66" y="66" width="6" height="6"/></g></svg>
+    <div><p id="qrText">Şarjı başlatmak için Rotosis uygulamasından istasyondaki QR kodu okutun.</p>
+    <a class="dugme" id="appBtn" href="#" data-todo="uygulama-baglantisi">Uygulamayı aç</a></div>
+  </section>
+
+  <section class="kart">
+    <h2 id="sessTitle">Bu seans</h2>
+    <dl>
+      <dt>Süre</dt><dd id="sTime">—</dd>
+      <dt>Enerji</dt><dd id="sKwh">—</dd>
+      <dt>Tahmini maliyet</dt><dd id="sCost">—</dd>
+    </dl>
+  </section>
+
+  <section class="kart">
+    <h2>Son seanslar</h2>
+    <p class="bos"><svg class="i" aria-hidden="true"><use href="#iK"/></svg>Geçmiş seanslarınız, uygulamada giriş yaptığınızda burada görünecek.</p>
+  </section>
+
+  <!-- DEMO:BASLA (yalnizca taslak; gercek koda tasirken bu blogu sil) -->
+  <div class="demo" id="demoBox"><b>Taslak demo</b> — sunucu yoksa sahte veri. Durum:
+    <div id="demoSeg"><button data-d="">Oto</button><button data-d="A">A</button><button data-d="B">B</button><button data-d="C">C</button><button data-d="F">F</button></div>
+  </div>
+  <!-- DEMO:BITIR -->
+
+  <footer>
+    <button class="ik" id="installBtn" hidden>Ana ekrana ekle</button>
+    <span id="ts">Son güncelleme: -</span>
+    <a href="/admin">Yönetici girişi</a>
+  </footer>
+</main>
+
+<script>
+const POLL_MS=3000;
+const ST={
+  A:{t:"Araç bağlı değil",h:"Şarj kablosunu aracınıza takın.",i:"sA"},
+  B:{t:"Araç bağlı, hazır",h:"Şarjı başlatmak için uygulamadan QR kodu okutun.",i:"sB"},
+  C:{t:"Şarj oluyor",h:"Enerji aracınıza aktarılıyor.",i:"sC"},
+  D:{t:"Şarj oluyor",h:"Havalandırmalı şarj modu.",i:"sC"},
+  E:{t:"Bağlantı hatası",h:"Araçla iletişim kurulamadı. Kabloyu çıkarıp yeniden takın.",i:"sE"},
+  F:{t:"İstasyon hatası",h:"Koruma devrede. Sorun sürerse yetkiliye başvurun.",i:"sE"}
+};
+const $=id=>document.getElementById(id);
+function setText(id,v){const e=$(id);if(e&&e.textContent!==v)e.textContent=v;}
+function nf(v,d){return (Number(v)||0).toLocaleString("tr-TR",{minimumFractionDigits:d,maximumFractionDigits:d});}
+function fmtDur(s){s=Math.max(0,Math.floor(Number(s)||0));const h=Math.floor(s/3600),m=Math.floor(s%3600/60);
+  return h?h+" sa "+String(m).padStart(2,"0")+" dk":(m?m+" dk "+String(s%60).padStart(2,"0")+" sn":s+" sn");}
+let fails=0,lastState="",timer=0,busy=false;
+
+function render(d,demo){
+  const st=ST[d.state]?d.state:"A",m=ST[st];
+  const charging=st==="C"||st==="D";
+  if(st!==lastState){
+    lastState=st;
+    $("stateCard").dataset.s=st;
+    $("stateIcon").setAttribute("href","#"+m.i);
+    setText("stateTitle",m.t);setText("stateHint",m.h);
+    $("aracSvg").setAttribute("aria-label","Araç görseli: "+m.t.toLocaleLowerCase("tr-TR"));
+  }
+  setText("stationName",d.stationName||"Şarj istasyonu");
+  setText("stationAddr",d.stationAddr||"-");
+  // alarm
+  const lv=Number(d.alarmLv)||0,ab=$("alarmBand");
+  ab.hidden=lv<1;
+  if(lv>0){ab.className="alarm l"+(lv>1?2:1);setText("alarmTxt",d.alarmTxt||"Uyarı");}
+  // canli kart
+  const ph=Math.min(3,Math.max(1,Number(d.phase)||1));
+  const lim=Math.max(6,Number(d.limitTargetA??d.limitA)||32);
+  const live=!!d.sLive;
+  const kwh=live&&d.sLiveKWh!==undefined?d.sLiveKWh:d.eKWh;
+  const sec=live&&d.sLiveSec!==undefined?d.sLiveSec:d.tSec;
+  $("liveCard").hidden=!charging;
+  if(charging){
+    setText("pwr",nf((Number(d.pW)||0)/1000,1));
+    setText("ekwh",nf(kwh,2));
+    setText("tsec",fmtDur(sec));
+    setText("phaseInfo",ph+" faz");
+    [d.ia,d.ib,d.ic].forEach((a,k)=>{
+      $("ph"+(k+1)).hidden=k>=ph;
+      a=Number(a)||0;
+      setText("i"+(k+1),nf(a,1)+" A");
+      $("b"+(k+1)).style.width=Math.min(100,a/lim*100).toFixed(0)+"%";
+    });
+    setText("limitA",nf(lim,0));
+  }
+  // QR metni duruma gore
+  setText("qrText",charging?"Şarjı durdurmak veya takip etmek için Rotosis uygulamasını kullanın.":"Şarjı başlatmak için Rotosis uygulamasından istasyondaki QR kodu okutun.");
+  // seans ozeti
+  const has=live||(Number(sec)||0)>0;
+  setText("sessTitle",live?"Bu seans":"Son seans");
+  setText("sTime",has?fmtDur(sec):"—");
+  setText("sKwh",has?nf(kwh,2)+" kWh":"—");
+  setText("sCost","—"); // tarife bilgisi henuz yok
+  setText("ts",(demo?"Demo veri · ":"Son güncelleme: ")+new Date().toLocaleTimeString("tr-TR"));
+}
+
+function setNet(ok){
+  const s=$("sync"),n=$("netStrip");
+  s.className="canli"+(ok?" on":"");
+  setText("sync",ok?"CANLI":"BAĞLANTI YOK");
+  if(ok){n.hidden=true;return;}
+  n.hidden=false;
+  n.className=fails<3?"uyari":"kotu";
+  setText("netStrip",fails<3?"Bağlantı zayıf, yeniden bağlanıyor…":"İstasyona bağlantı koptu. Yeniden deneniyor…");
+}
+
+function pull(){
+  clearTimeout(timer);
+  /* DEMO:BASLA */ if(demoForce){render(demoData(),true);setNet(true);timer=setTimeout(pull,POLL_MS);return;} /* DEMO:BITIR */
+  if(busy)return;busy=true;
+  const ac=new AbortController(),to=setTimeout(()=>ac.abort(),2500);
+  fetch("/status_public",{cache:"no-store",signal:ac.signal})
+    .then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})
+    .then(d=>{fails=0;setNet(true);render(d,false);})
+    .catch(()=>{fails++;setNet(false);
+      /* DEMO:BASLA */ render(demoData(),true); /* DEMO:BITIR */
+    })
+    .finally(()=>{clearTimeout(to);busy=false;clearTimeout(timer);if(!document.hidden)timer=setTimeout(pull,POLL_MS);});
+}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull();});
+
+/* DEMO:BASLA — yalnizca taslak; gercek koda tasirken bu blogu ve DEMO isaretli satirlari sil */
+let demoForce="",demoT0=Date.now();
+function demoData(){
+  const keys=["A","B","C","F"];
+  const st=demoForce||keys[Math.floor((Date.now()-demoT0)/12000)%4];
+  const sec=Math.floor((Date.now()-demoT0)/1000)+1820,ch=st==="C";
+  const j=()=>Math.random()*.6;
+  return {state:st,ia:ch?15.6+j():0,ib:ch?15.9+j():0,ic:ch?15.2+j():0,pW:ch?10840+Math.random()*200:0,
+    eKWh:5.43,tSec:sec,phase:3,modeId:0,limitA:16,limitTargetA:16,staOk:1,
+    stationName:"Rotosis AVM Otopark 1",stationAddr:"Örnek Mah. Sanayi Cad. No:12, Kocaeli",
+    alarmLv:st==="F"?2:0,alarmTxt:st==="F"?"Kaçak akım koruması devrede":"",
+    sLive:ch?1:0,sLiveSec:sec,sLiveKWh:sec*10.8/3600};
+}
+$("demoSeg").addEventListener("click",e=>{
+  const b=e.target.closest("button");if(!b)return;
+  demoForce=b.dataset.d;
+  for(const x of $("demoSeg").children)x.classList.toggle("on",x===b);
+  pull();
+});
+$("demoSeg").firstElementChild.classList.add("on");
+/* DEMO:BITIR */
+
+// PWA: kurulum + service worker (mevcut davranis korunur)
+let deferredPrompt=null;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;$("installBtn").hidden=false;});
+$("installBtn").addEventListener("click",()=>{
+  if(!deferredPrompt)return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.finally(()=>{deferredPrompt=null;$("installBtn").hidden=true;});
+});
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));}
+// Uygulama baglantisi henuz yok (TODO: universal link / app link)
+$("appBtn").addEventListener("click",e=>{if($("appBtn").getAttribute("href")==="#")e.preventDefault();});
+pull();
+</script>
+</body></html>
