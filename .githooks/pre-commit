@@ -4,4 +4,4 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-python3 scripts/bump_version_on_commit.py
+py scripts/bump_version_on_commit.py
