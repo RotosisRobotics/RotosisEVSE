@@ -316,6 +316,7 @@ static uint32_t lastEnergyMs = 0;
 static uint32_t chargeAccumMs = 0;
 static uint32_t chargeSegmentStartMs = 0;
 static uint32_t sessionStartMs = 0;
+static uint32_t sessionActiveMs = 0;   // seansin gercek sarj suresi (duraklamalar sayilmaz)
 static float sessionStartEnergyWh = 0.0f;
 static uint8_t sessionPhaseMax = 1;
 
@@ -342,6 +343,7 @@ void resetChargeData(bool clearHistory)
   chargeAccumMs = 0;
   chargeSegmentStartMs = 0;
   sessionStartMs = 0;
+  sessionActiveMs = 0;
   sessionStartEnergyWh = 0.0f;
   sessionPhaseMax = 1;
 
@@ -518,6 +520,7 @@ void loop()
     if (!g_sessionLive) {
       g_sessionLive = true;
       sessionStartMs = nowMs;
+      sessionActiveMs = 0;
       sessionStartEnergyWh = energyWh;
       sessionPhaseMax = threePhase ? 3 : 1;
       g_sessionLiveStartSec = sessionStartMs / 1000;
@@ -532,14 +535,20 @@ void loop()
     uint32_t dtMs = nowMs - lastEnergyMs;
     energyWh += (powerW * (dtMs / 3600000.0f));
     lastEnergyMs = nowMs;
+    sessionActiveMs += dtMs;
 
-    g_sessionLiveSeconds = (nowMs - sessionStartMs) / 1000;
+    g_sessionLiveSeconds = sessionActiveMs / 1000;
     float liveWh = energyWh - sessionStartEnergyWh;
     if (liveWh < 0.0f) liveWh = 0.0f;
     g_sessionLiveEnergyKWh = liveWh / 1000.0f;
   } else {
-    if (g_sessionLive) {
-      uint32_t durSec = (nowMs - sessionStartMs) / 1000;
+    // Arac kilitli kapiyi acinca sarji bekletir (state B'ye doner). Fis takili ve PWM acik
+    // oldugu surece seans DURAKLAMIS sayilir; akim tekrar gelince ayni seans surer.
+    // Seans yalniz fis cikinca (state A) ya da STOP/izin kaldirma/hata ile biter.
+    bool sessionPaused = g_sessionLive && cableConnected && pwmEnabled &&
+                         m.stateStable != "E" && m.stateStable != "F";
+    if (g_sessionLive && !sessionPaused) {
+      uint32_t durSec = sessionActiveMs / 1000;
       float deltaWh = energyWh - sessionStartEnergyWh;
       if (deltaWh < 0.0f) deltaWh = 0.0f;
       float avgW = (durSec > 0) ? (deltaWh * 3600.0f / durSec) : 0.0f;
