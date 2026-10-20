@@ -1,0 +1,60 @@
+#pragma once
+#include <Arduino.h>
+
+// SC_2 - ikinci nesil sarj karti.
+// Donanim pin haritasi burada tutulur.
+
+#define HARDWARE_ID "SC_2"
+
+// OLED (I2C: Wire.begin(SDA, SCL))
+#define OLED_SDA 18
+#define OLED_SCL 17
+
+// CP / kontaktor / guc elektroniigi hatlari.
+#define CP_PWM_PIN       2
+#define CP_ADC_PIN       1
+#define PP_ADC_PIN       16
+#define RELAY_PIN        4
+
+// 3 faz akim sensor girisleri.
+// Yeni kart: L1/L2/L3 akim sensorleri.
+#define CURRENT_SENSORS_ENABLED 1
+#define CURRENT_SENSOR_PIN_A 5
+#define CURRENT_SENSOR_PIN_B 6
+#define CURRENT_SENSOR_PIN_C 7
+
+// Ayri RGB LED (simdilik uygulama mantiginda kullanilmiyor)
+#define RGB_LED_PIN      15
+
+#define STATE_LED_PIN    13
+#define WIFI_LED_PIN     12
+#define ERROR_LED_PIN    14
+
+// Geri uyumluluk (eski isim)
+#define BLUE_LED_PIN     STATE_LED_PIN
+
+// Eski latch kartlari icin tutulur. Bu PCB'de kullanilmaz (GPIO7=L3, GPIO16=PP).
+#define MOSFET_RESET_PIN 7
+#define MOSFET_SET_PIN   16
+
+// Kontactor surucu aktif-high: HIGH=AC, LOW=KAPAT
+#define RELAY_ACTIVE_LOW 0
+
+// Farkli role donanimlari icin cikis secimi.
+#define RELAY_USE_OUTPUT_PIN 1
+#define RELAY_USE_LATCH_PINS 0
+#define RELAY_LATCH_FOLLOW_STATE 0
+#define RELAY_LATCH_PULSE_MS 0
+
+// CP PWM surucu ayarlari.
+#define PWM_CHANNEL      0
+#define PWM_FREQ         1000
+#define PWM_RESOLUTION   10
+
+// 32A limiti icin IEC 61851'e gore yaklasik duty.
+#define PWM_DUTY_32A     53
+
+// OTA: SC_2 kendi manifestine bakar; manifestte "hw":"SC_2" ZORUNLU.
+#define HW_OTA_MANIFEST_URL \
+  "https://raw.githubusercontent.com/RotosisRobotics/RotosisEVSE/main/version_SC_2.json"
+#define HW_OTA_CHECK_HW 1

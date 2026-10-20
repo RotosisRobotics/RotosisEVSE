@@ -10,6 +10,8 @@
 // - Komut tekrar korumasi (ayni id ikinci kez uygulanmaz, yalnizca yeniden onaylanir)
 // - Guvenli mod kapisi (requireCloudStart): sarj yalnizca BASLARKEN bulut "start" ister;
 //   basladiktan sonra baglanti kopsa da sarj kesilmez.
+// - Sunucu seans bildirimi (activeSession): yeniden baslama sonrasi izni geri yukler,
+//   kesin "seans yok" cevabi izni kaldirir; baglanti hatasi izne dokunmaz.
 
 #include <stddef.h>
 #include <stdint.h>
@@ -56,7 +58,15 @@ struct Telemetry {
   bool schedBlocked = false;
   bool schedTimeOk = false;
   int32_t schedNextChangeInSec = -1;
+  // requireCloudStart acik, arac bagli (B/C/D), panel STOP yok ama bulut izni yok: PWM bilerek verilmiyor
+  // (or. yeniden baslama sonrasi). Sunucu bu durumda C->B gecisini "arac bitirdi" saymaz (fw 1.1.68+).
+  bool authWait = false;
 };
+
+// Telemetry::authWait degeri.
+inline bool auth_wait(bool requireCloudStart, char state, bool authorized, bool localStop) {
+  return requireCloudStart && (state == 'B' || state == 'C' || state == 'D') && !authorized && !localStop;
+}
 
 struct Ack {
   bool has = false;
@@ -77,10 +87,27 @@ struct PollResponse {
   bool hasCmd = false;
   int64_t cmdId = 0;
   CmdType type = CmdType::None;
+  // Sunucu (2026-10+) bu istasyonda ACTIVE seans var mi bildirir. Eski sunucu alani gondermez:
+  // hasSession=false (bilinmiyor) -> izin degistirilmez.
+  bool hasSession = false;
+  bool activeSession = false;
+  int64_t sessionId = 0;  // activeSession iken (yoksa 0)
 };
 
 // Yanit JSON'unu ayristirir. Bicim bozuksa false.
 bool parse_poll_response(const char* body, size_t len, PollResponse& out);
+
+// Sunucunun seans bildirimi ("sunucu tek dogru kaynak").
+enum class SessionVerdict : uint8_t {
+  Unknown = 0,  // yanit yok/gecersiz, alan yok, ya da komut isleniyor: izne DOKUNMA
+  Active,       // sunucuda ACTIVE seans var
+  None          // sunucu kesin olarak "seans yok" dedi
+};
+
+// Yoklama sonucundan kullanilabilir seans bildirimi cikarir (bulut gorevi tarafinda).
+// parsedOk: HTTP 200 + gecerli JSON + ok:true. Yanitta komut varsa ya da bir komut henuz
+// uygulanip onaylanmadiysa (cmdInFlight) bildirim o komutla yarisabilir: Unknown.
+SessionVerdict session_verdict(bool parsedOk, const PollResponse& r, bool cmdInFlight);
 
 const char* cmd_type_name(CmdType t);
 
@@ -124,9 +151,18 @@ class CommandTracker {
 // Aciksa: sarjin BASLAMASI icin bulut "start" komutu gerekir. Izni yalnizca bulut "stop",
 // arac ayrilmasi (A) ve yerel panelden durdurma (STOP modu) kaldirir. Bulut/Wi-Fi baglantisinin
 // kopmasi izni KALDIRMAZ (sarj kesilmez). Zamanlayici izni etkilemez, yalnizca bekletir.
-// Izin RAM'dedir; yeniden baslatmada kalkar.
+// Izin RAM'dedir; yeniden baslatmada kalkar, ama sunucu ACTIVE seans bildirirse geri yuklenir
+// (on_server_session). Sunucunun kesin "seans yok" cevabi izni kaldirir.
 class SafeGate {
  public:
+  enum class SyncResult : uint8_t { NoChange = 0, Restored, Revoked };
+  // Sunucu seans bildirimi (her gecerli yoklamada bir kez). requireCloudStart kapaliysa etkisiz.
+  // Active: arac bagli (B/C/D), panel STOP yok ve fis cikisi sunucuya bildirilmisse (unplugReported)
+  //   izin geri yuklenir. unplugReported=false: fis cikip takildi ama sunucu A'yi henuz gormedi;
+  //   bildirilen seans onceki takmaya aittir, yeni takmaya tasinmaz.
+  // None: izin kalkar (sarj guvenli durdurulur). Unknown: hicbir sey degismez.
+  SyncResult on_server_session(SessionVerdict v, bool requireCloudStart, char state, bool localStop,
+                               bool unplugReported);
   // "start" komutu. Donus = ackOk. Arac B/C/D degilse reddedilir.
   bool on_start(char state, bool requireCloudStart);
   // "stop" komutu. Her zaman basarili.

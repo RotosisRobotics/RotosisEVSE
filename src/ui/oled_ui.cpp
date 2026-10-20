@@ -1,4 +1,5 @@
 #include "oled_ui.h"
+#include "../log/dev_log.h"
 #include "app_pins.h"
 #include <U8g2lib.h>
 #include <Wire.h>
@@ -233,13 +234,13 @@ void oled_init()
     oledAvailable = true;
   } else {
     oledAvailable = false;
-    Serial.println("OLED bulunamadi: 0x3C / 0x3D cevap vermedi.");
+    LogOut.println("OLED bulunamadi: 0x3C / 0x3D cevap vermedi.");
     return;
   }
 
   u8g2.setI2CAddress(oledAddress << 1);
   u8g2.begin();
-  Serial.printf("OLED hazir: SH1106 @ 0x%02X\n", oledAddress);
+  LogOut.printf("OLED hazir: SH1106 @ 0x%02X\n", oledAddress);
 
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_6x10_tf);

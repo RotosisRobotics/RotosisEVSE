@@ -1,6 +1,6 @@
-﻿{
-    "version":  "1.1.66",
-    "url":  "https://raw.githubusercontent.com/RotosisRobotics/RotosisEVSE/main/firmware/uzaktanotali.bin",
-    "size":  1237360,
-    "sha256":  "3dd79f227905ae6cc56bdbd0fb5453071d18eae6501ab1c5cc583c5ce271202a"
+{
+    "version": "1.1.70",
+    "url": "https://raw.githubusercontent.com/RotosisRobotics/RotosisEVSE/main/firmware/uzaktanotali.bin",
+    "size": 1255920,
+    "sha256": "a18f5631cea4b2d916a0f0bab315ae466e43c6c10c548932f4cfc763c35699c8"
 }

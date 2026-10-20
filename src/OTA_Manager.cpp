@@ -1,4 +1,5 @@
 #include "OTA_Manager.h"
+#include "log/dev_log.h"
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -10,6 +11,7 @@
 #include <mbedtls/sha256.h>
 
 #include "net/web_ui.h"
+#include "app_pins.h"   // HARDWARE_ID, HW_OTA_CHECK_HW
 
 namespace {
 struct OtaContext {
@@ -151,7 +153,7 @@ static void clearCustomTrialState(bool clearRuntime = true) {
 
 static bool armCustomTrialState(const Manifest& manifest, const esp_partition_t* target) {
   if (!retry.prefsReady || target == nullptr) {
-    Serial.println("[OTA] Custom trial state kaydedilemedi; Preferences hazir degil");
+    LogOut.println("[OTA] Custom trial state kaydedilemedi; Preferences hazir degil");
     return false;
   }
 
@@ -161,7 +163,7 @@ static bool armCustomTrialState(const Manifest& manifest, const esp_partition_t*
   otaPrefs.putString("trial_hb", heartbeat);
   otaPrefs.putUChar("trial_sub", static_cast<uint8_t>(target->subtype));
   persistUptimeNow();
-  Serial.printf("[OTA] Custom trial armed: version=%s target=%s\n",
+  LogOut.printf("[OTA] Custom trial armed: version=%s target=%s\n",
                 manifest.version.c_str(),
                 partitionSubtypeLabel(target->subtype));
   return true;
@@ -196,14 +198,14 @@ static void resumeCustomTrialState() {
       ctx.verifyHeartbeatUrl = heartbeat;
       ctx.verifyHeartbeatResolved = true;
     }
-    Serial.printf("[OTA] Custom trial aktif: version=%s partition=%s\n",
+    LogOut.printf("[OTA] Custom trial aktif: version=%s partition=%s\n",
                   armedVersion.c_str(),
                   partitionSubtypeLabel(running->subtype));
     return;
   }
 
   if (running->subtype == ESP_PARTITION_SUBTYPE_APP_FACTORY || !versionMatches) {
-    Serial.printf("[OTA] Stale custom trial temizleniyor: armed=%s current=%s running=%s\n",
+    LogOut.printf("[OTA] Stale custom trial temizleniyor: armed=%s current=%s running=%s\n",
                   armedVersion.c_str(),
                   CURRENT_VERSION,
                   partitionSubtypeLabel(running->subtype));
@@ -312,13 +314,24 @@ static bool parseManifest(const String& payload, Manifest& out) {
   StaticJsonDocument<256> doc;
   auto err = deserializeJson(doc, cleanPayload);
   if (err) {
-    Serial.printf("[OTA] version.json parse hatasi: %s\n", err.c_str());
+    LogOut.printf("[OTA] version.json parse hatasi: %s\n", err.c_str());
     return false;
   }
   if (!doc.containsKey("version") || !doc.containsKey("url")) {
-    Serial.println("[OTA] version.json beklenen alanlari icermiyor (version, url)");
+    LogOut.println("[OTA] version.json beklenen alanlari icermiyor (version, url)");
     return false;
   }
+#if HW_OTA_CHECK_HW
+  // Donanim ayrimi: baska karta ait firmware asla yuklenmesin.
+  {
+    String hw = doc.containsKey("hw") ? doc["hw"].as<String>() : String("");
+    if (hw != HARDWARE_ID) {
+      LogOut.printf("[OTA] Donanim uyusmuyor, guncelleme REDDEDILDI: manifest hw='%s' cihaz=%s\n",
+                    hw.c_str(), HARDWARE_ID);
+      return false;
+    }
+  }
+#endif
   out.version = doc["version"].as<String>();
   out.url = doc["url"].as<String>();
   if (doc.containsKey("health_url")) out.healthUrl = doc["health_url"].as<String>();
@@ -331,7 +344,7 @@ static bool fetchManifest(Manifest& out) {
   if (ctx.manifestUrl.isEmpty()) {
     ctx.lastStatus = "manifest_url_missing";
     ctx.lastError = "Manifest URL tanimli degil";
-    Serial.println("[OTA] Manifest URL tanimli degil");
+    LogOut.println("[OTA] Manifest URL tanimli degil");
     return false;
   }
 
@@ -342,11 +355,11 @@ static bool fetchManifest(Manifest& out) {
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.setTimeout(3000);
 
-  Serial.printf("[OTA] Manifest GET: %s\n", ctx.manifestUrl.c_str());
+  LogOut.printf("[OTA] Manifest GET: %s\n", ctx.manifestUrl.c_str());
   if (!http.begin(client, ctx.manifestUrl)) {
     ctx.lastStatus = "manifest_begin_failed";
     ctx.lastError = "HTTP baslatilamadi";
-    Serial.println("[OTA] HTTP baslatilamadi");
+    LogOut.println("[OTA] HTTP baslatilamadi");
     return false;
   }
 
@@ -354,7 +367,7 @@ static bool fetchManifest(Manifest& out) {
   if (code != HTTP_CODE_OK) {
     ctx.lastStatus = "manifest_http_error";
     ctx.lastError = String("Manifest HTTP ") + code;
-    Serial.printf("[OTA] Manifest indirilemedi, HTTP %d\n", code);
+    LogOut.printf("[OTA] Manifest indirilemedi, HTTP %d\n", code);
     http.end();
     return false;
   }
@@ -379,7 +392,7 @@ static bool performUpdate(const Manifest& manifest) {
        next->subtype != ESP_PARTITION_SUBTYPE_APP_OTA_1)) {
     ctx.lastStatus = "update_target_invalid";
     ctx.lastError = "OTA hedef partition guvenli degil (yalnizca ota_0/ota_1 izinli)";
-    Serial.println("[OTA] RED: OTA sadece ota_0/ota_1 partitionlarina yazabilir");
+    LogOut.println("[OTA] RED: OTA sadece ota_0/ota_1 partitionlarina yazabilir");
     return false;
   }
 
@@ -401,7 +414,7 @@ static bool performUpdate(const Manifest& manifest) {
       clearCustomTrialState(false);
       ctx.lastStatus = "update_failed";
       ctx.lastError = httpUpdate.getLastErrorString();
-      Serial.printf("[OTA] Update HATA: %s (code %d)\n",
+      LogOut.printf("[OTA] Update HATA: %s (code %d)\n",
                     httpUpdate.getLastErrorString().c_str(),
                     httpUpdate.getLastError());
       return false;
@@ -409,12 +422,12 @@ static bool performUpdate(const Manifest& manifest) {
       clearCustomTrialState(false);
       ctx.lastStatus = "no_updates";
       ctx.lastError = "";
-      Serial.println("[OTA] Yeni surum yok (HTTP_UPDATE_NO_UPDATES)");
+      LogOut.println("[OTA] Yeni surum yok (HTTP_UPDATE_NO_UPDATES)");
       return true;
     case HTTP_UPDATE_OK:
       ctx.lastStatus = "update_ok";
       ctx.lastError = "";
-      Serial.println("[OTA] Update indirildi, reboot ediliyor..." );
+      LogOut.println("[OTA] Update indirildi, reboot ediliyor..." );
       return true;
   }
   return false;
@@ -424,15 +437,15 @@ static bool switchBootToFactory() {
   const esp_partition_t* factory =
       esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, nullptr);
   if (!factory) {
-    Serial.println("[OTA] Factory partition bulunamadi");
+    LogOut.println("[OTA] Factory partition bulunamadi");
     return false;
   }
   esp_err_t err = esp_ota_set_boot_partition(factory);
   if (err != ESP_OK) {
-    Serial.printf("[OTA] Factory boot secilemedi: %s\n", esp_err_to_name(err));
+    LogOut.printf("[OTA] Factory boot secilemedi: %s\n", esp_err_to_name(err));
     return false;
   }
-  Serial.println("[OTA] Bir sonraki boot: FACTORY");
+  LogOut.println("[OTA] Bir sonraki boot: FACTORY");
   return true;
 }
 
@@ -541,7 +554,7 @@ static bool markRunningAppValid() {
   if (ctx.builtinPendingVerify) {
     esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
     if (err != ESP_OK) {
-      Serial.printf("[OTA] Rollback iptal basarisiz: %s\n", esp_err_to_name(err));
+      LogOut.printf("[OTA] Rollback iptal basarisiz: %s\n", esp_err_to_name(err));
       return false;
     }
   }
@@ -552,7 +565,7 @@ static bool markRunningAppValid() {
   ctx.customTrialPending = false;
   syncPendingVerifyFlag();
   clearBackoff();
-  Serial.println("[OTA] Yeni firmware stabil olarak isaretlendi; rollback iptal");
+  LogOut.println("[OTA] Yeni firmware stabil olarak isaretlendi; rollback iptal");
   return true;
 }
 
@@ -581,10 +594,10 @@ static void handleUpdateCheck() {
   if (!fetchManifest(m)) return;
 
   int cmp = compareVersionTokens(m.version, CURRENT_VERSION);
-  Serial.printf("[OTA] Surumler: remote=%s local=%s cmp=%d\n", m.version.c_str(), CURRENT_VERSION, cmp);
+  LogOut.printf("[OTA] Surumler: remote=%s local=%s cmp=%d\n", m.version.c_str(), CURRENT_VERSION, cmp);
   if (cmp > 0) {
     ctx.lastStatus = "update_available";
-    Serial.printf("[OTA] Yeni surum bulunuyor -> %s\n", m.url.c_str());
+    LogOut.printf("[OTA] Yeni surum bulunuyor -> %s\n", m.url.c_str());
     if (!ctx.installRequested) {
       ctx.lastUpdateOk = true;
       ctx.lastError = "Admin onayi bekleniyor";
@@ -603,7 +616,7 @@ static void handleUpdateCheck() {
   } else {
     ctx.installRequested = false;
     ctx.lastStatus = "up_to_date";
-    Serial.println("[OTA] Cihaz guncel");
+    LogOut.println("[OTA] Cihaz guncel");
     ctx.lastUpdateOk = true;
     clearBackoff();
   }
@@ -623,7 +636,7 @@ static void handleRollbackGuard() {
   // Manuel /update akisinda custom trial state yoktur. Bu durumda cihazin
   // kendi web arayuzunu basariyla servis edebilmesi "saglikli boot" icin yeterli.
   if (web_ready_for_ota_validation()) {
-    Serial.println("[OTA] Local web healthcheck OK; firmware valid olarak isaretleniyor");
+    LogOut.println("[OTA] Local web healthcheck OK; firmware valid olarak isaretleniyor");
     markRunningAppValid();
     return;
   }
@@ -643,7 +656,7 @@ static void handleRollbackGuard() {
   if ((now - ctx.bootMs) > kVerifyTimeoutMs) {
     ctx.lastStatus = "healthcheck_timeout_factory";
     ctx.lastError = "30 sn onay yok, factory partitiona donuluyor";
-    Serial.println("[OTA] 30 sn icinde onay yok; FACTORY fallback tetikleniyor");
+    LogOut.println("[OTA] 30 sn icinde onay yok; FACTORY fallback tetikleniyor");
     if (!ctx.failureRecorded) {
       noteFailure("healthcheck_timeout");
       ctx.failureRecorded = true;
@@ -658,13 +671,13 @@ static void handleRollbackGuard() {
     clearCustomTrialState();
     esp_err_t err = esp_ota_mark_app_invalid_rollback_and_reboot();
     if (err != ESP_OK) {
-      Serial.printf("[OTA] rollback_and_reboot basarisiz: %s\n", esp_err_to_name(err));
+      LogOut.printf("[OTA] rollback_and_reboot basarisiz: %s\n", esp_err_to_name(err));
       ESP.restart();
     }
   }
 
   if (!ctx.markedValid && (now - ctx.bootMs) > kVerifyTimeoutMs) {
-    Serial.println("[OTA] 30 sn icinde dogrulanamadi; reset olursa bootloader onceki bolume donecek");
+    LogOut.println("[OTA] 30 sn icinde dogrulanamadi; reset olursa bootloader onceki bolume donecek");
   }
 }
 
@@ -702,7 +715,7 @@ void begin(const char* manifestUrl, uint32_t checkIntervalMs, const char* sha1Fi
   } else if (err == ESP_OK && state == ESP_OTA_IMG_PENDING_VERIFY) {
     ctx.builtinPendingVerify = true;
     syncPendingVerifyFlag();
-    Serial.println("[OTA] Pending verify: rollback penceresi acik");
+    LogOut.println("[OTA] Pending verify: rollback penceresi acik");
   } else {
     ctx.builtinPendingVerify = false;
     syncPendingVerifyFlag();

@@ -179,6 +179,153 @@ static void test_parse_response() {
   TEST_ASSERT_FALSE(parse_poll_response("", 0, r));
 }
 
+static void test_parse_active_session() {
+  PollResponse r;
+  // Eski sunucu: alan yok -> bilinmiyor
+  const char* a = "{\"ok\":true,\"t\":1,\"cmd\":null}";
+  TEST_ASSERT_TRUE(parse_poll_response(a, strlen(a), r));
+  TEST_ASSERT_FALSE(r.hasSession);
+  const char* b = "{\"ok\":true,\"t\":1,\"cmd\":null,\"activeSession\":true,\"sessionId\":17}";
+  TEST_ASSERT_TRUE(parse_poll_response(b, strlen(b), r));
+  TEST_ASSERT_TRUE(r.hasSession);
+  TEST_ASSERT_TRUE(r.activeSession);
+  TEST_ASSERT_TRUE(r.sessionId == 17);
+  const char* c = "{\"ok\":true,\"t\":1,\"cmd\":null,\"activeSession\":false,\"sessionId\":null}";
+  TEST_ASSERT_TRUE(parse_poll_response(c, strlen(c), r));
+  TEST_ASSERT_TRUE(r.hasSession);
+  TEST_ASSERT_FALSE(r.activeSession);
+  TEST_ASSERT_TRUE(r.sessionId == 0);
+  // Bool olmayan deger -> bilinmiyor (yanit yine gecerli)
+  const char* d = "{\"ok\":true,\"t\":1,\"cmd\":null,\"activeSession\":\"yes\"}";
+  TEST_ASSERT_TRUE(parse_poll_response(d, strlen(d), r));
+  TEST_ASSERT_FALSE(r.hasSession);
+  const char* e = "{\"ok\":true,\"t\":1,\"cmd\":null,\"activeSession\":1}";
+  TEST_ASSERT_TRUE(parse_poll_response(e, strlen(e), r));
+  TEST_ASSERT_FALSE(r.hasSession);
+  // Komut + payload + seans alani birlikte (bellek yeterli)
+  const char* f =
+      "{\"ok\":true,\"t\":1791289203,\"cmd\":{\"id\":9007199254740,\"type\":\"set_limit\",\"payload\":{\"a\":16,\"b\":32}},"
+      "\"activeSession\":true,\"sessionId\":9007199254741}";
+  TEST_ASSERT_TRUE(parse_poll_response(f, strlen(f), r));
+  TEST_ASSERT_TRUE(r.hasCmd);
+  TEST_ASSERT_TRUE(r.hasSession && r.activeSession);
+  TEST_ASSERT_TRUE(r.sessionId == 9007199254741LL);
+}
+
+static void test_build_json_auth_wait() {
+  Telemetry t;
+  t.state = 'B';
+  Ack ack;
+  char buf[512];
+  StaticJsonDocument<768> d;
+  TEST_ASSERT_GREATER_THAN(0, build_poll_json(buf, sizeof(buf), "IST01", kTestSecret, t, "1.1.68", ack));
+  TEST_ASSERT_TRUE(deserializeJson(d, buf) == DeserializationError::Ok);
+  TEST_ASSERT_TRUE(d["authWait"].is<bool>());
+  TEST_ASSERT_FALSE(d["authWait"].as<bool>());
+  t.authWait = true;
+  // En uzun durum: paused + ack + uzun fw, 512'ye sigmali
+  t.paused = true;
+  t.resumeInSec = 604800;
+  t.schedNextChangeInSec = 604800;
+  t.ia = t.ib = t.ic = -999.99f;
+  t.pW = 99999.9f;
+  t.eKWh = 999999.999f;
+  t.tSec = 4294967295u;
+  ack.has = true;
+  ack.id = 9223372036854775807LL;
+  int n = build_poll_json(buf, sizeof(buf), "ABCDEFGHIJKLMNOP", kTestSecret, t, "1.1.68-abcdefghijklmn", ack);
+  TEST_ASSERT_GREATER_THAN(0, n);
+  TEST_ASSERT_LESS_THAN(512, n);
+  d.clear();
+  TEST_ASSERT_TRUE(deserializeJson(d, buf) == DeserializationError::Ok);
+  TEST_ASSERT_TRUE(d["authWait"].as<bool>());
+
+  // auth_wait: yalniz require + arac bagli + izin yok + panel STOP yok
+  TEST_ASSERT_TRUE(auth_wait(true, 'B', false, false));
+  TEST_ASSERT_TRUE(auth_wait(true, 'C', false, false));
+  TEST_ASSERT_FALSE(auth_wait(false, 'B', false, false));
+  TEST_ASSERT_FALSE(auth_wait(true, 'A', false, false));
+  TEST_ASSERT_FALSE(auth_wait(true, 'F', false, false));
+  TEST_ASSERT_FALSE(auth_wait(true, 'B', true, false));
+  TEST_ASSERT_FALSE(auth_wait(true, 'B', false, true));
+}
+
+static void test_session_verdict() {
+  PollResponse r;
+  r.ok = true;
+  // Gecersiz yanit / baglanti hatasi -> Unknown
+  TEST_ASSERT_TRUE(session_verdict(false, r, false) == SessionVerdict::Unknown);
+  // Eski sunucu (alan yok) -> Unknown
+  TEST_ASSERT_TRUE(session_verdict(true, r, false) == SessionVerdict::Unknown);
+  r.hasSession = true;
+  r.activeSession = true;
+  TEST_ASSERT_TRUE(session_verdict(true, r, false) == SessionVerdict::Active);
+  r.activeSession = false;
+  TEST_ASSERT_TRUE(session_verdict(true, r, false) == SessionVerdict::None);
+  // ok:false -> Unknown
+  r.ok = false;
+  TEST_ASSERT_TRUE(session_verdict(true, r, false) == SessionVerdict::Unknown);
+  r.ok = true;
+  // Yanitta komut var (start onayi henuz sunucuda degil) -> Unknown
+  r.hasCmd = true;
+  TEST_ASSERT_TRUE(session_verdict(true, r, false) == SessionVerdict::Unknown);
+  r.hasCmd = false;
+  // Onceki komut uygulanmayi/onaylanmayi bekliyor -> Unknown
+  TEST_ASSERT_TRUE(session_verdict(true, r, true) == SessionVerdict::Unknown);
+}
+
+static void test_safe_gate_server_session() {
+  using SR = SafeGate::SyncResult;
+  // Yeniden baslama: izin yok, arac B; ilk gecerli yoklamada sunucu "aktif" -> izin geri gelir
+  SafeGate g;
+  TEST_ASSERT_FALSE(g.update(true, 'B', false));
+  TEST_ASSERT_TRUE(g.on_server_session(SessionVerdict::Active, true, 'B', false, true) == SR::Restored);
+  TEST_ASSERT_TRUE(g.update(true, 'B', false));
+  TEST_ASSERT_TRUE(g.on_server_session(SessionVerdict::Active, true, 'C', false, true) == SR::NoChange);
+  // Baglanti hatasi / bilinmiyor izne dokunmaz
+  TEST_ASSERT_TRUE(g.on_server_session(SessionVerdict::Unknown, true, 'C', false, true) == SR::NoChange);
+  TEST_ASSERT_TRUE(g.update(true, 'C', false));
+  // Kesin "seans yok" -> izin kalkar
+  TEST_ASSERT_TRUE(g.on_server_session(SessionVerdict::None, true, 'C', false, true) == SR::Revoked);
+  TEST_ASSERT_FALSE(g.update(true, 'C', false));
+  TEST_ASSERT_TRUE(g.on_server_session(SessionVerdict::None, true, 'B', false, true) == SR::NoChange);
+  TEST_ASSERT_TRUE(g.on_server_session(SessionVerdict::Unknown, true, 'B', false, true) == SR::NoChange);
+  TEST_ASSERT_FALSE(g.authorized());
+
+  // Arac yok (A) ya da hata (E/F): aktif bildirim izin vermez
+  SafeGate a;
+  TEST_ASSERT_TRUE(a.on_server_session(SessionVerdict::Active, true, 'A', false, true) == SR::NoChange);
+  TEST_ASSERT_TRUE(a.on_server_session(SessionVerdict::Active, true, 'E', false, true) == SR::NoChange);
+  TEST_ASSERT_TRUE(a.on_server_session(SessionVerdict::Active, true, 'F', false, true) == SR::NoChange);
+  TEST_ASSERT_FALSE(a.authorized());
+  // Panel STOP (ya da bulut STOP kilidi) aktifken geri yukleme yok
+  TEST_ASSERT_TRUE(a.on_server_session(SessionVerdict::Active, true, 'B', true, true) == SR::NoChange);
+  TEST_ASSERT_FALSE(a.authorized());
+  // Fis cikip takildi, sunucu A'yi gormedi: eski seans yeni takmaya tasinmaz
+  TEST_ASSERT_TRUE(a.on_server_session(SessionVerdict::Active, true, 'B', false, false) == SR::NoChange);
+  TEST_ASSERT_FALSE(a.authorized());
+  // requireCloudStart kapali: etkisiz (izin zaten serbest)
+  SafeGate off;
+  TEST_ASSERT_TRUE(off.on_server_session(SessionVerdict::Active, false, 'B', false, true) == SR::NoChange);
+  TEST_ASSERT_TRUE(off.on_server_session(SessionVerdict::None, false, 'B', false, true) == SR::NoChange);
+  TEST_ASSERT_TRUE(off.update(false, 'B', false));
+
+  // Fis cikinca (A) izin yine silinir; ayni seansta geri takma sunucu bildirimine baglidir
+  SafeGate p;
+  TEST_ASSERT_TRUE(p.on_start('C', true));
+  TEST_ASSERT_FALSE(p.update(true, 'A', false));
+  TEST_ASSERT_FALSE(p.authorized());
+
+  // Bulut start sonrasi normal akis bozulmaz; stop izni kaldirir, sonraki "aktif" (ack oncesi) panel STOP
+  // kilidi nedeniyle geri yuklemez
+  SafeGate s;
+  TEST_ASSERT_TRUE(s.on_start('B', true));
+  TEST_ASSERT_TRUE(s.on_server_session(SessionVerdict::Active, true, 'C', false, true) == SR::NoChange);
+  s.on_stop();
+  TEST_ASSERT_TRUE(s.on_server_session(SessionVerdict::Active, true, 'C', true, true) == SR::NoChange);
+  TEST_ASSERT_FALSE(s.update(true, 'C', true));
+}
+
 static void test_command_dedupe() {
   CommandTracker tr;
   TEST_ASSERT_FALSE(tr.pending_ack().has);
@@ -466,6 +613,10 @@ int main(int, char**) {
   RUN_TEST(test_build_json_basic_and_ack);
   RUN_TEST(test_build_json_paused_and_errors);
   RUN_TEST(test_parse_response);
+  RUN_TEST(test_parse_active_session);
+  RUN_TEST(test_build_json_auth_wait);
+  RUN_TEST(test_session_verdict);
+  RUN_TEST(test_safe_gate_server_session);
   RUN_TEST(test_command_dedupe);
   RUN_TEST(test_command_dedupe_after_reboot);
   RUN_TEST(test_safe_gate_off_keeps_behavior);

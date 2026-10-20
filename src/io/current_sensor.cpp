@@ -1,5 +1,9 @@
 #include "current_sensor.h"
 #include "app_pins.h"
+
+// CURRENT_SENSORS_ENABLED (src/hw/config_scN.h) 0 ise olcum kodu derlenmez,
+// dosya sonundaki bos (0 A donen) surum kullanilir.
+#if CURRENT_SENSORS_ENABLED
 #include "EmonLib.h"
 #include <Preferences.h>
 #include <Arduino.h>
@@ -267,6 +271,16 @@ float current_sensor_get_irms_b() { return last_irms_b; }
 float current_sensor_get_irms_c() { return last_irms_c; }
 float current_sensor_get_irms_total() { return last_irms_a + last_irms_b + last_irms_c; }
 
+float current_sensor_quick_max_a() {
+    // Gurultu tabani cikarilir; EMA, histerezis ve aralik ofsetleri uygulanmaz (yalniz "akim var mi").
+    const int n = 100;
+    float mx = 0.0f;
+    if (s_enA) { float v = emonA.calcIrms(n) - (noise_floor_a + 0.15f); if (v > mx) mx = v; }
+    if (s_enB) { float v = emonB.calcIrms(n) - (noise_floor_b + 0.15f); if (v > mx) mx = v; }
+    if (s_enC) { float v = emonC.calcIrms(n) - (noise_floor_c + 0.15f); if (v > mx) mx = v; }
+    return mx;
+}
+
 void current_sensor_set_calibration(float calA, float calB, float calC,
                                     float offA, float offB, float offC) {
     s_calA = constrain(calA, kMinIcal, kMaxIcal);
@@ -322,3 +336,40 @@ void current_sensor_get_enabled(bool* enA, bool* enB, bool* enC) {
     if (enB) *enB = s_enB;
     if (enC) *enC = s_enC;
 }
+
+#else  // !CURRENT_SENSORS_ENABLED
+
+// Akim sensoru olmayan kart: tum okumalar 0 A.
+void current_sensor_init() {}
+void current_sensor_loop() {}
+float current_sensor_get_irms_a() { return 0.0f; }
+float current_sensor_get_irms_b() { return 0.0f; }
+float current_sensor_get_irms_c() { return 0.0f; }
+float current_sensor_get_irms_total() { return 0.0f; }
+float current_sensor_quick_max_a() { return 0.0f; }
+void current_sensor_set_calibration(float, float, float, float, float, float) {}
+void current_sensor_get_calibration(float* calA, float* calB, float* calC,
+                                    float* offA, float* offB, float* offC) {
+    if (calA) *calA = 0.0f;
+    if (calB) *calB = 0.0f;
+    if (calC) *calC = 0.0f;
+    if (offA) *offA = 0.0f;
+    if (offB) *offB = 0.0f;
+    if (offC) *offC = 0.0f;
+}
+void current_sensor_set_range_profile(float, float, float, float) {}
+void current_sensor_get_range_profile(float* lowMaxA, float* midMaxA,
+                                      float* lowOffsetA, float* midOffsetA) {
+    if (lowMaxA) *lowMaxA = 0.0f;
+    if (midMaxA) *midMaxA = 0.0f;
+    if (lowOffsetA) *lowOffsetA = 0.0f;
+    if (midOffsetA) *midOffsetA = 0.0f;
+}
+void current_sensor_set_enabled(bool, bool, bool) {}
+void current_sensor_get_enabled(bool* enA, bool* enB, bool* enC) {
+    if (enA) *enA = false;
+    if (enB) *enB = false;
+    if (enC) *enC = false;
+}
+
+#endif  // CURRENT_SENSORS_ENABLED

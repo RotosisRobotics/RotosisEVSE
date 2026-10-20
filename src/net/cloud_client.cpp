@@ -1,4 +1,5 @@
 #include "cloud_client.h"
+#include "../log/dev_log.h"
 
 #include <HTTPClient.h>
 #include <Preferences.h>
@@ -11,6 +12,7 @@
 #include "cloud_certs.h"
 #include "cloud_core.h"
 #include "io/relay.h"
+#include "io/relay_core.h"
 #include "schedule.h"
 
 using namespace evse_cloud;
@@ -50,6 +52,16 @@ bool s_cmdDone = false;
 int64_t s_cmdId = 0;
 CmdType s_cmdType = CmdType::None;
 bool s_cmdOk = false;
+
+// Gorev -> ana dongu: sunucu seans bildirimi (her gecerli yoklamada bir kez tuketilir)
+bool s_verdictPending = false;
+SessionVerdict s_verdict = SessionVerdict::Unknown;
+int64_t s_verdictSid = 0;
+// Fis cikis sayaci (ana dongu artirir) ve sunucuya "A" bildirilmis son sayac (gorev yazar).
+// Esit degilse fis cikip takilmis ama sunucu A'yi henuz gormemistir: "aktif seans" eski takmaya aittir.
+uint32_t s_unplugGen = 0;        // yalnizca ana dongu yazar
+uint32_t s_telUnplugGen = 0;     // s_mux; s_tel ile birlikte
+uint32_t s_aReportedGen = 0;     // s_mux
 
 // Gorev -> herkes (durum)
 bool s_everOk = false;
@@ -96,8 +108,14 @@ bool activeNow() {
   return a;
 }
 
-// PWM bu turda kapatilir (cloud_loop false doner / STOP modu); role, arac C/D'den ciktiginda
-// ya da en gec kSoftStopMaxWaitMs sonra mevcut guvenli kapatma yoluyla (relay_force_off_now) birakilir.
+// PWM bu turda kapatilir (cloud_loop false doner / STOP modu). Kontaktoru role modulu acar
+// (relay_update_auto -> relay_core::off_decision): akim ~0 olunca, arac C/D'de kaldiysa en gec
+// kSoftStopMaxWaitMs sonra. Burasi yalniz yedektir: o sure + B zaman asimi + pay sonra hala
+// kapaliysa kosulsuz birakir.
+static_assert(evse_relay::kOffSoftStopTimeoutMs == kSoftStopMaxWaitMs,
+              "role yumusak durdurma suresi bulut ile ayni olmali");
+constexpr uint32_t kSoftStopBackupMs = kSoftStopMaxWaitMs + evse_relay::kOffLoadTimeoutBMs + 500;
+
 void beginSoftStop(uint32_t nowMs) {
   if (s_softStop) return;
   s_softStop = true;
@@ -106,11 +124,17 @@ void beginSoftStop(uint32_t nowMs) {
 
 void serviceSoftStop(char st, uint32_t nowMs) {
   if (!s_softStop) return;
+  uint32_t el = (uint32_t)(nowMs - s_softStopAtMs);
   bool drawing = (st == 'C' || st == 'D');
-  if (drawing && (uint32_t)(nowMs - s_softStopAtMs) < kSoftStopMaxWaitMs) return;
-  relay_force_off_now();
+  if (drawing && el < kSoftStopMaxWaitMs) return;
+  if (!relay_contacts_open()) {
+    if (el < kSoftStopBackupMs) return;  // role modulu akim sifirlaninca acacak
+    relay_force_off_now();
+    LogOut.printf("[GATE] Guvenli durdurma: role YEDEK yoldan birakildi (%lu ms, durum=%c)\n", (unsigned long)el, st);
+  } else {
+    LogOut.printf("[GATE] Guvenli durdurma tamam: kontaktor acik (%lu ms, durum=%c)\n", (unsigned long)el, st);
+  }
   s_softStop = false;
-  Serial.println("[GATE] Guvenli durdurma: role birakildi");
 }
 
 // Komutu mevcut sarj kontrol yoluna cevirir (g_chargeMode + guvenli mod kapisi). Donus = ackOk.
@@ -180,7 +204,7 @@ void collectAppliedResult() {
   if (!done) return;
   s_tracker.on_applied(id, ok);
   persistLast(id, ok);
-  Serial.printf("[CLOUD] Komut id=%lld tip=%s uygulandi, ok=%d\n", (long long)id, cmd_type_name(type), ok ? 1 : 0);
+  LogOut.printf("[CLOUD] Komut id=%lld tip=%s uygulandi, ok=%d\n", (long long)id, cmd_type_name(type), ok ? 1 : 0);
 }
 
 void handleCommand(const PollResponse& r) {
@@ -192,9 +216,9 @@ void handleCommand(const PollResponse& r) {
     s_cmdId = r.cmdId;
     s_cmdType = r.type;
     portEXIT_CRITICAL(&s_mux);
-    Serial.printf("[CLOUD] Komut alindi id=%lld tip=%s\n", (long long)r.cmdId, cmd_type_name(r.type));
+    LogOut.printf("[CLOUD] Komut alindi id=%lld tip=%s\n", (long long)r.cmdId, cmd_type_name(r.type));
   } else if (d == CommandTracker::Decision::ReAck) {
-    Serial.printf("[CLOUD] Komut id=%lld tekrar geldi: uygulanmadi, yeniden onaylanacak\n", (long long)r.cmdId);
+    LogOut.printf("[CLOUD] Komut id=%lld tekrar geldi: uygulanmadi, yeniden onaylanacak\n", (long long)r.cmdId);
   }
 }
 
@@ -275,9 +299,11 @@ void cloudTask(void*) {
 
     Telemetry t;
     bool telValid;
+    uint32_t telGen;
     portENTER_CRITICAL(&s_mux);
     t = s_tel;
     telValid = s_telValid;
+    telGen = s_telUnplugGen;
     portEXIT_CRITICAL(&s_mux);
     if (!telValid) {
       vTaskDelay(pdMS_TO_TICKS(500));
@@ -325,7 +351,16 @@ void cloudTask(void*) {
       // Yalnizca bu yanitta gelen (sunucuda hala gecerli) komut uygulanir.
       if (resp.hasCmd) handleCommand(resp);
     }
+    // Sunucu seans bildirimi: yalnizca gecerli yanitta ve komut yarisi yokken (aksi Unknown = izne dokunma).
+    SessionVerdict verdict = session_verdict(parsedOk, resp, s_tracker.in_flight());
     portENTER_CRITICAL(&s_mux);
+    if (parsedOk && resp.hasCmd) s_verdictPending = false;  // eski bildirim yeni komutun onune gecmesin
+    if (verdict != SessionVerdict::Unknown) {
+      s_verdict = verdict;
+      s_verdictSid = resp.sessionId;
+      s_verdictPending = true;
+    }
+    if (parsedOk && t.state == 'A') s_aReportedGen = telGen;  // sunucu fis cikisini gordu (seansi kapatti)
     s_lastHttp = code;
     if (parsedOk) {
       s_everOk = true;
@@ -341,7 +376,7 @@ void cloudTask(void*) {
 
     if (code != lastLoggedHttp) {
       lastLoggedHttp = code;
-      Serial.printf("[CLOUD] Yoklama HTTP %d%s\n", code, parsedOk ? "" : " (basarisiz)");
+      LogOut.printf("[CLOUD] Yoklama HTTP %d%s\n", code, parsedOk ? "" : " (basarisiz)");
     }
     vTaskDelay(pdMS_TO_TICKS(backoff_delay_ms(failures)));
   }
@@ -386,9 +421,21 @@ void cloud_init() {
   memset(c.secret, 0, sizeof(c.secret));
 
   BaseType_t ok = xTaskCreatePinnedToCore(cloudTask, "cloud", 10240, nullptr, 1, nullptr, 0);
-  Serial.printf("[CLOUD] Bulut gorevi %s; durum: %s (requireCloudStart=%d)\n",
+  LogOut.printf("[CLOUD] Bulut gorevi %s; durum: %s (requireCloudStart=%d)\n",
                 ok == pdPASS ? "basladi" : "BASLATILAMADI",
                 active ? "etkin" : "Bulut ayari yapilmadi / kapali", req ? 1 : 0);
+}
+
+void cloud_on_vehicle_unplugged() {
+  // Fis cikti (kararli A): bu seansa ait hicbir izin/kilit sonraki takmaya tasinmaz.
+  s_gate.on_stop();          // bulut "start" onayi kalkar (requireCloudStart acikken yeni start gerekir)
+  s_unplugGen++;             // sunucu A'yi gorene kadar "aktif seans" bildirimi izni geri yuklemez
+  portENTER_CRITICAL(&s_mux);
+  s_verdictPending = false;  // cikistan onceki bildirim yeni takmaya uygulanmaz
+  portEXIT_CRITICAL(&s_mux);
+  s_softStop = false;        // role zaten birakildi (main.cpp relay_force_off_now)
+  s_cloudStopLatched = false;
+  s_paused = false;
 }
 
 bool cloud_active() { return activeNow(); }
@@ -484,7 +531,7 @@ bool cloud_apply_config(const CloudCfgChange& ch, const char** err) {
   s_requireStart = nextReq;
   bool active = isActive(next);
   memset(next.secret, 0, sizeof(next.secret));
-  Serial.printf("[CLOUD] Ayar kaydedildi: %s, kod=%s, requireCloudStart=%d%s\n",
+  LogOut.printf("[CLOUD] Ayar kaydedildi: %s, kod=%s, requireCloudStart=%d%s\n",
                 active ? "etkin" : "pasif", effCode(next), nextReq ? 1 : 0,
                 codeChanged ? " (kod degisti; komut gecmisi sifirlandi)" : "");
   return true;
@@ -561,11 +608,36 @@ bool cloud_loop(const String& stableState, float ia, float ib, float ic,
 
   // 3) Guvenli mod kapisi (baglanti kopmasi izni KALDIRMAZ) + zamanlayici
   bool localStop = (g_chargeMode == 2);
+
+  // 3a) Sunucu seans bildirimi: yeniden baslama sonrasi izni geri yukle / kesin "seans yok"ta kaldir.
+  bool haveVerdict = false;
+  SessionVerdict verdict = SessionVerdict::Unknown;
+  int64_t verdictSid = 0;
+  bool unplugReported;
+  portENTER_CRITICAL(&s_mux);
+  if (s_verdictPending) {
+    haveVerdict = true;
+    verdict = s_verdict;
+    verdictSid = s_verdictSid;
+    s_verdictPending = false;
+  }
+  unplugReported = (s_aReportedGen == s_unplugGen);
+  portEXIT_CRITICAL(&s_mux);
+  if (haveVerdict) {
+    SafeGate::SyncResult sr = s_gate.on_server_session(verdict, require, st, localStop, unplugReported);
+    if (sr == SafeGate::SyncResult::Restored) {
+      LogOut.printf("[GATE] Sunucuda aktif seans (id=%lld): sarj izni geri yuklendi (durum=%c)\n",
+                    (long long)verdictSid, st);
+    } else if (sr == SafeGate::SyncResult::Revoked) {
+      LogOut.printf("[GATE] Sunucuda aktif seans yok: sarj izni kaldirildi (durum=%c)\n", st);
+    }
+  }
+
   bool gatePermit = s_gate.update(require, st, localStop);
   bool permit = gatePermit && !schedBlocked;
   if (s_prevPermit && !permit) {
     beginSoftStop(nowMs);
-    Serial.printf("[GATE] Sarj izni kalkti (durum=%c, %s)\n", st,
+    LogOut.printf("[GATE] Sarj izni kalkti (durum=%c, %s)\n", st,
                   schedBlocked ? "planli sarj yasakli aralik" : "uygulamadan baslatma bekleniyor");
   }
   // Izin geri geldiyse ve STOP modu yoksa bekleyen birakma iptal (sarj kesintisiz surer).
@@ -596,6 +668,8 @@ bool cloud_loop(const String& stableState, float ia, float ib, float ic,
     s_tel.schedBlocked = schedBlocked;
     s_tel.schedTimeOk = se.timeValid;
     s_tel.schedNextChangeInSec = se.nextChangeInSec;
+    s_tel.authWait = auth_wait(require, st, s_gate.authorized(), localStop);
+    s_telUnplugGen = s_unplugGen;
     s_telValid = true;
     portEXIT_CRITICAL(&s_mux);
   }

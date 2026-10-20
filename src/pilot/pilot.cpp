@@ -62,8 +62,21 @@ void pilot_init()
   ledcWrite(PWM_CHANNEL, 1023);
 }
 
+static bool s_forceCpLow = false;
+
+void pilot_force_cp_low(bool on)
+{
+  s_forceCpLow = on;
+}
+
 void pilot_apply_pwm()
 {
+  // Arac uyandirma (state F darbesi): CP sabit LOW (-12V / 0V, donanima bagli).
+  if (s_forceCpLow) {
+    ledcWrite(PWM_CHANNEL, 0);
+    return;
+  }
+
   // PWM kapalıysa veya Duty 0 ise hattı sabit 12V'da (State A voltajı) tut
   if (!pwmEnabled || pwmDutyPercent <= 0) {
     // 10-bit çözünürlükte (0-1023) tam HIGH

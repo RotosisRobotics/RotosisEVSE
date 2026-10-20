@@ -16,6 +16,9 @@ struct PilotMeasurements {
 void pilot_init();
 void pilot_apply_pwm();
 void pilot_update();
+// true iken pilot_apply_pwm CP'yi sabit LOW yazar (IEC 61851 / ISO 15118-3 state E/F uyandirma darbesi).
+// Yalnizca main.cpp'deki uyandirma dongusu kullanir; bu surede pilot_update cagrilmamalidir.
+void pilot_force_cp_low(bool on);
 PilotMeasurements pilot_get();
 
 // PWM kontrolü (web dokunmayacak ama main kullanacak)

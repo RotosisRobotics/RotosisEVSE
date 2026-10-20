@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "log/dev_log.h"
 #include <WiFi.h>
 #include <Preferences.h>
 #include <esp_ota_ops.h>
@@ -7,6 +8,8 @@
 #include "app_config.h"
 #include "app_pins.h"
 #include "pilot/pilot.h"
+#include "pilot/wake_core.h"
+#include "pilot/wake_cfg.h"
 #include "io/relay.h"
 #include "net/web_ui.h"
 #include "net/cloud_client.h"
@@ -15,8 +18,8 @@
 #include "io/current_sensor.h"
 #include "OTA_Manager.h"
 
-static constexpr char kOtaManifestUrl[] =
-  "https://raw.githubusercontent.com/RotosisRobotics/RotosisEVSE/main/version.json";
+// Manifest yolu donanima gore src/hw/config_scN.h icinde (SC_1: main/version.json).
+static constexpr char kOtaManifestUrl[] = HW_OTA_MANIFEST_URL;
 static constexpr char kGitHubFingerprint[] = "";
 static constexpr uint32_t kOtaAutoCheckIntervalMs = 60UL * 60UL * 1000UL;
 static constexpr uint8_t kMaxConsecutiveWdtResets = 3;
@@ -32,6 +35,23 @@ static uint8_t sQuickResetBootStreak = 0;
 static bool sQuickResetClearArmed = false;
 static uint32_t sQuickResetClearStartMs = 0;
 static esp_reset_reason_t sLastResetReason = ESP_RST_UNKNOWN;
+
+static const char* resetReasonName(esp_reset_reason_t r)
+{
+  switch (r) {
+    case ESP_RST_POWERON:   return "POWERON";
+    case ESP_RST_EXT:       return "EXT";
+    case ESP_RST_SW:        return "SW";
+    case ESP_RST_PANIC:     return "PANIC";
+    case ESP_RST_INT_WDT:   return "INT_WDT";
+    case ESP_RST_TASK_WDT:  return "TASK_WDT";
+    case ESP_RST_WDT:       return "WDT";
+    case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
+    case ESP_RST_BROWNOUT:  return "BROWNOUT";
+    case ESP_RST_SDIO:      return "SDIO";
+    default:                return "UNKNOWN";
+  }
+}
 
 static bool isWdtResetReason(esp_reset_reason_t reason)
 {
@@ -49,12 +69,12 @@ static bool switchBootToFactory()
     ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, nullptr
   );
   if (factory == nullptr) {
-    Serial.println("[BOOTCTL] Factory partition bulunamadi");
+    LogOut.println("[BOOTCTL] Factory partition bulunamadi");
     return false;
   }
   esp_err_t err = esp_ota_set_boot_partition(factory);
   if (err != ESP_OK) {
-    Serial.printf("[BOOTCTL] Factory secilemedi: %s\n", esp_err_to_name(err));
+    LogOut.printf("[BOOTCTL] Factory secilemedi: %s\n", esp_err_to_name(err));
     return false;
   }
   return true;
@@ -73,12 +93,12 @@ static void handleForceFactoryByButton()
 
   const esp_partition_t* running = esp_ota_get_running_partition();
   if (running && running->subtype == ESP_PARTITION_SUBTYPE_APP_FACTORY) {
-    Serial.println("[BOOTCTL] Zaten factory partitionda");
+    LogOut.println("[BOOTCTL] Zaten factory partitionda");
     return;
   }
 
   if (switchBootToFactory()) {
-    Serial.println("[BOOTCTL] GPIO0 ile factory secildi; buton birakilinca yeniden baslatilacak");
+    LogOut.println("[BOOTCTL] GPIO0 ile factory secildi; buton birakilinca yeniden baslatilacak");
     while (digitalRead(kForceFactoryPin) == LOW) {
       delay(10);
     }
@@ -109,12 +129,12 @@ static void pollForceFactoryByButtonRuntime()
 
   const esp_partition_t* running = esp_ota_get_running_partition();
   if (running && running->subtype == ESP_PARTITION_SUBTYPE_APP_FACTORY) {
-    Serial.println("[BOOTCTL] Runtime hold algilandi ama zaten factory partitionda");
+    LogOut.println("[BOOTCTL] Runtime hold algilandi ama zaten factory partitionda");
     return;
   }
 
   if (switchBootToFactory()) {
-    Serial.println("[BOOTCTL] Runtime hold ile factory secildi; buton birakilinca yeniden baslatilacak");
+    LogOut.println("[BOOTCTL] Runtime hold ile factory secildi; buton birakilinca yeniden baslatilacak");
     sFactoryRestartPending = true;
   }
 }
@@ -125,7 +145,7 @@ static void processPendingFactoryRestart()
   if (digitalRead(kForceFactoryPin) == LOW) return;
 
   sFactoryRestartPending = false;
-  Serial.println("[BOOTCTL] Buton birakildi, factory icin yeniden baslatiliyor");
+  LogOut.println("[BOOTCTL] Buton birakildi, factory icin yeniden baslatiliyor");
   delay(100);
   esp_restart();
 }
@@ -227,7 +247,7 @@ static void handleRescueFallbackIfNeeded()
   if (failCount >= kMaxConsecutiveWdtResets && switchBootToFactory()) {
     prefs.putUChar("wdt_cnt", 0);
     prefs.end();
-    Serial.println("[BOOTCTL] 3x WDT reset algilandi, factory secildi");
+    LogOut.println("[BOOTCTL] 3x WDT reset algilandi, factory secildi");
     delay(50);
     esp_restart();
   }
@@ -239,7 +259,7 @@ static void handleRescueFallbackIfNeeded()
     prefs.end();
     sQuickResetBootStreak = 0;
     sQuickResetClearArmed = false;
-    Serial.printf("[BOOTCTL] %u hizli reset algilandi, factory secildi\n", quickResetStreak);
+    LogOut.printf("[BOOTCTL] %u hizli reset algilandi, factory secildi\n", quickResetStreak);
     delay(50);
     esp_restart();
   }
@@ -260,7 +280,7 @@ static void clearQuickResetStreakIfStable()
   sQuickResetBootStreak = 0;
   sQuickResetClearArmed = false;
   sQuickResetClearStartMs = 0;
-  Serial.println("[BOOTCTL] Hizli reset sayaci temizlendi");
+  LogOut.println("[BOOTCTL] Hizli reset sayaci temizlendi");
 }
 
 // Bu dosya projenin merkez akisidir.
@@ -281,7 +301,7 @@ float TH_D_MIN = 5.0f;
 float TH_E_MIN = 1.0f;
 float marginUp = 0.30f;
 float marginDown = 0.30f;
-int   stableCount = 3;
+int   stableCount = 3;      // CP debounce: ardisik ayni okuma sayisi (hizli yol, her biri 25 ms)
 int   loopIntervalMs = 200; // Varsayilan olcum hizi 200 ms
 
 float g_powerW = 0.0f;
@@ -401,13 +421,169 @@ static int amps_to_duty(float amps)
   return dutyPercent;
 }
 
+// ---------------------------------------------------------------------------
+// Arac uyandirma (planli sarj / gec gelen izin) -- durum makinesi: src/pilot/wake_core.h
+// Senaryo: arac B'de uzun sure PWM'siz bekledi; izin gelip PWM acildiginda arac uykuda oldugu icin
+// B->C yapmiyor. Yontem (B1 / F / PWM5), sure, deneme sayisi NVS'de (wake_cfg, GET/POST /api/wake).
+// Darbe YALNIZ state B'de, kontaktor kesin birakikken ve akim yokken yapilir (ark riski yok).
+// Normal takip-sarj et akisi etkilenmez: tetik yalniz "PWM'siz B'de >= kArmMinIdleBMs bekledikten
+// sonra PWM acildi" durumunda kurulur.
+static evse_wake::Machine s_wake;
+static uint32_t s_wakeCfgGen = 0;
+static bool s_wakeCpLow = false;    // pilot_force_cp_low'a en son yazilan
+static bool s_wakeCpDirty = false;  // CP cikisi bu turda yeniden yazilmali
+
+const char* wake_runtime_phase() { return evse_wake::phase_name(s_wake.phase()); }
+uint8_t wake_runtime_attempts() { return s_wake.attempts(); }
+
+static void wake_set_cp_low(bool on)
+{
+  if (on == s_wakeCpLow) return;
+  pilot_force_cp_low(on);
+  s_wakeCpLow = on;
+  s_wakeCpDirty = true;
+}
+
+static const char* wake_method_desc(evse_wake::Method m)
+{
+  switch (m) {
+    case evse_wake::Method::B1Pulse:   return "PWM kapali, CP sabit +12V/+9V (B1)";
+    case evse_wake::Method::FPulse:    return "CP sabit LOW -12V/0V (F)";
+    case evse_wake::Method::Pwm5: return "PWM %5, sonra E/F, sonra nominal (ISO 15118-3)";
+  }
+  return "?";
+}
+
+static uint32_t wake_method_ms(const evse_wake::Config& c, evse_wake::Method m)
+{
+  switch (m) {
+    case evse_wake::Method::B1Pulse:   return c.b1Ms;
+    case evse_wake::Method::FPulse:    return c.fMs;
+    case evse_wake::Method::Pwm5: return c.pwm5Ms + c.efMs;
+  }
+  return 0;
+}
+
+static void wake_log(const evse_wake::Output& o, const PilotMeasurements& m, float iA, uint32_t now)
+{
+  using evse_wake::Event;
+  if (o.ev == Event::None) return;
+  const evse_wake::Config& c = s_wake.config();
+  const char* st = m.stateStable.c_str();
+  char seq[40];
+  switch (o.ev) {
+    case Event::Armed:
+      evse_wake::format_seq(c, seq, sizeof(seq));
+      LogOut.printf("[WAKE] PWM %lu sn PWM'siz bekleme sonrasi acildi; %lu sn icinde C gelmezse uyandirma "
+                    "(yontem=%s, en cok %u) st=%s CP=%.2fV I=%.2f A\n",
+                    (unsigned long)(o.info / 1000), (unsigned long)(c.waitMs / 1000), seq,
+                    (unsigned)c.maxAttempts, st, m.cpHigh, iA);
+      break;
+    case Event::NotArmed:
+      LogOut.printf("[WAKE] PWM acildi ama PWM'siz bekleme %lu ms < %lu ms; uyandirma kurulmadi (st=%s I=%.2f A)\n",
+                    (unsigned long)o.info, (unsigned long)evse_wake::kArmMinIdleBMs, st, iA);
+      break;
+    case Event::Deferred:
+      LogOut.printf("[WAKE] Darbe %u/%u ertelendi: kontaktor birakik degil ya da akim var "
+                    "(kontaktorAcik=%d I=%.2f A st=%s)\n",
+                    (unsigned)(s_wake.attempts() + 1), (unsigned)c.maxAttempts,
+                    relay_contacts_open() ? 1 : 0, iA, st);
+      break;
+    case Event::PulseStart:
+      LogOut.printf("[WAKE] Arac B'de bekliyor: darbe %u/%u BASLADI yontem=%s (%s) sure=%lu ms "
+                    "st=%s CP=%.2fV I=%.2f A t=%lu\n",
+                    (unsigned)s_wake.attempts(), (unsigned)c.maxAttempts,
+                    evse_wake::method_name(s_wake.method()), wake_method_desc(s_wake.method()),
+                    (unsigned long)wake_method_ms(c, s_wake.method()), st, m.cpHigh, iA, (unsigned long)now);
+      break;
+    case Event::StepEF:
+      LogOut.printf("[WAKE] PWM5 adimi bitti (%lu ms); E/F adimi BASLADI (%lu ms, CP sabit LOW) st=%s CP=%.2fV t=%lu\n",
+                    (unsigned long)o.info, (unsigned long)c.efMs, st, m.cpHigh, (unsigned long)now);
+      break;
+    case Event::PulseEnd:
+      LogOut.printf("[WAKE] Darbe %u/%u BITTI yontem=%s (%lu ms surdu), PWM nominale donuyor; st=%s CP=%.2fV "
+                    "I=%.2f A t=%lu; %s\n",
+                    (unsigned)s_wake.attempts(), (unsigned)c.maxAttempts,
+                    evse_wake::method_name(s_wake.method()), (unsigned long)o.info, st, m.cpHigh, iA,
+                    (unsigned long)now,
+                    (s_wake.attempts() >= c.maxAttempts) ? "son darbe, C beklenecek"
+                                                         : "C gelmezse sonraki darbe beklenecek");
+      break;
+    case Event::SettleEnd:
+      LogOut.printf("[WAKE] F sonrasi oturma bitti, CP olcumu yeniden acik (deneme=%u st=%s CP=%.2fV I=%.2f A)\n",
+                    (unsigned)s_wake.attempts(), st, m.cpHigh, iA);
+      break;
+    case Event::GaveUp:
+      LogOut.printf("[WAKE] %lu darbe sonrasi arac sarja gecmedi; vazgecildi (PWM acik birakildi) st=%s CP=%.2fV I=%.2f A\n",
+                    (unsigned long)o.info, st, m.cpHigh, iA);
+      break;
+    case Event::ResetCharging:
+      LogOut.printf("[WAKE] Arac sarja gecti (deneme=%lu, st=%s)\n", (unsigned long)o.info, st);
+      break;
+    case Event::ResetLeftB:
+      LogOut.printf("[WAKE] Arac B'den cikti, uyandirma iptal (deneme=%lu, st=%s)\n", (unsigned long)o.info, st);
+      break;
+    case Event::ResetNoPermit:
+      LogOut.printf("[WAKE] Sarj izni kalkti, uyandirma iptal (deneme=%lu)\n", (unsigned long)o.info);
+      break;
+    case Event::ResetConfig:
+      LogOut.printf("[WAKE] Ayar degisti/kapatildi, uyandirma iptal (deneme=%lu)\n", (unsigned long)o.info);
+      break;
+    default:
+      break;
+  }
+}
+
+// Fis cikinca (kararli A kenari) bir kez: seansa ait hicbir izin/mod sonraki takmaya tasinmaz.
+static void onVehicleUnplugged()
+{
+  g_chargeMode = 0;                 // panel START/STOP ve bulut STOP modu biter
+  g_manualStopAlertUntilMs = 0;
+  g_manualStopAutoResumeAtMs = 0;
+  cloud_on_vehicle_unplugged();     // bulut "start" onayi, guvenli durdurma, bulut STOP kilidi
+  relay_force_off_now();            // role + latch RESET; A'da arac yok, akim yok (ark riski yok)
+  s_wake.on_unplug();
+  wake_set_cp_low(false);
+  LogOut.println("[SEANS] Fis cikti (A): seans bitti; mod, bulut izni ve role kilidi sifirlandi");
+}
+
+// Hizli CP yolu (kPilotFastTickMs): CP olcumu + debounce burada; C->B / A / E-F'de kontaktor
+// beklemeden acilir (relay_fast_guard). Debounce suresi = stableCount x kPilotFastTickMs
+// (varsayilan 3 x 25 = 75 ms; eskiden 3 x 200 = 600 ms). IEC 61851-1 hedefi: C->B < 100 ms.
+static constexpr uint32_t kPilotFastTickMs = 25;
+static char s_prevStableState = 'A';
+
+static void pilotFastTick()
+{
+  // Uyandirma F / E-F darbesi ve oturma suresinde CP olcumu dondurulur (son kararli state = B korunur).
+  if (!s_wake.pilot_frozen()) pilot_update();
+  PilotMeasurements m = pilot_get();
+  char st = m.stateStable.length() > 0 ? m.stateStable[0] : 'F';
+  // Fis cikti mi? Kararli (debounce'lu) A kenari: seans ve tum baslatma kalintilari sifirlanir.
+  if (st == 'A' && s_prevStableState != 'A') onVehicleUnplugged();
+  s_prevStableState = st;
+  relay_fast_guard(st);
+}
+
 void setup()
 {
   // Baslatma sirasi bilincli tutuldu:
   // 1) web/OTA, 2) OLED, 3) sensorler, 4) role, 5) pilot
   Serial.begin(115200);
   delay(200);
-  Serial.println("BOOT OK");
+  // Wi-Fi log tamponunun (GET /api/log) ilk satiri: surum + reset nedeni + calisan bolum.
+  {
+    const esp_partition_t* runPart = esp_ota_get_running_partition();
+    esp_reset_reason_t rr = esp_reset_reason();
+#ifdef CURRENT_VERSION
+    const char* fwVer = CURRENT_VERSION;
+#else
+    const char* fwVer = "?";
+#endif
+    LogOut.printf("[BOOT] RotosisEVSE v%s, reset=%s(%d), bolum=%s\n", fwVer, resetReasonName(rr), (int)rr,
+                  runPart ? runPart->label : "?");
+  }
+  LogOut.println("BOOT OK");
   initFactoryButton();
   handleRescueFallbackIfNeeded();
 
@@ -421,6 +597,7 @@ void setup()
 
   // Web + OTA
   sched_init();   // planli sarj ayari (NVS), web_init /status'ta kullanir
+  wake_cfg_init(); // arac uyandirma ayari (NVS), /api/wake
   web_init();
   cloud_init();   // sarj sunucusu istemcisi (anahtar yoksa kapali)
   OTA_Manager::begin(kOtaManifestUrl, kOtaAutoCheckIntervalMs, kGitHubFingerprint);
@@ -466,6 +643,12 @@ void loop()
   // Akim sensoru dongusu
   current_sensor_loop();
 
+  static uint32_t lastFast = 0;
+  if (millis() - lastFast >= kPilotFastTickMs) {
+    lastFast = millis();
+    pilotFastTick();
+  }
+
   static uint32_t last = 0;
   int safeLoopIntervalMs = loopIntervalMs;
   if (safeLoopIntervalMs < 20) safeLoopIntervalMs = 20;
@@ -473,7 +656,7 @@ void loop()
   if (millis() - last < (uint32_t)safeLoopIntervalMs) return;
   last = millis();
 
-  pilot_update();
+  // CP olcumu ve A kenari hizli yolda (pilotFastTick); burada son kararli deger okunur.
   auto m = pilot_get();
 
   bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
@@ -488,6 +671,9 @@ void loop()
   bool relaySet = relay_get();
   bool chargingState = (m.stateStable == "C" || m.stateStable == "D");
   bool accountingEnabled = relaySet && pwmEnabled && chargingState;
+  float rawIMax = ia;
+  if (ib > rawIMax) rawIMax = ib;
+  if (ic > rawIMax) rawIMax = ic;
 
   // Enerji ve akim sadece role cekili + PWM aktif + state C/D oldugunda gecerli sayilir.
   if (!accountingEnabled) {
@@ -545,7 +731,9 @@ void loop()
     // Arac kilitli kapiyi acinca sarji bekletir (state B'ye doner). Fis takili ve PWM acik
     // oldugu surece seans DURAKLAMIS sayilir; akim tekrar gelince ayni seans surer.
     // Seans yalniz fis cikinca (state A) ya da STOP/izin kaldirma/hata ile biter.
-    bool sessionPaused = g_sessionLive && cableConnected && pwmEnabled &&
+    // Uyandirma darbesi (PWM kisa sure kapali) seansi bitirmez. A'ya inen her durum seansi bitirir.
+    bool sessionPaused = g_sessionLive && cableConnected &&
+                         (pwmEnabled || s_wake.active()) &&
                          m.stateStable != "E" && m.stateStable != "F";
     if (g_sessionLive && !sessionPaused) {
       uint32_t durSec = sessionActiveMs / 1000;
@@ -665,24 +853,56 @@ void loop()
     nextDuty = 0;
   }
 
+  // Arac uyandirma: izinler sonrasi PWM isteniyor ama arac uzun beklemeden sonra B'de kaldiysa
+  // secilen yontemle darbe (B1 / F / PWM5). Yalniz state B + kontaktor birakik + akim yokken.
+  if (wake_cfg_gen() != s_wakeCfgGen) {
+    s_wakeCfgGen = wake_cfg_gen();
+    evse_wake::Output co;
+    co.ev = s_wake.set_config(wake_cfg_get());
+    wake_log(co, m, rawIMax, millis());
+  }
+  evse_wake::Input wi;
+  wi.st = m.stateStable.length() > 0 ? m.stateStable[0] : 'F';
+  wi.pwmWant = nextPwmEnabled;
+  wi.contactsOpen = relay_contacts_open();
+  wi.currentA = rawIMax;
+  wi.now = millis();
+  evse_wake::Output wo = s_wake.step(wi);
+  wake_log(wo, m, rawIMax, wi.now);
+  wake_set_cp_low(wo.forceCpLow);
+  bool wakeHold = wo.pwmOff || wo.dutyOverride > 0;
+  if (wo.pwmOff) {
+    nextPwmEnabled = false;
+    nextDuty = 0;
+  } else if (wo.dutyOverride > 0 && nextPwmEnabled) {
+    nextDuty = wo.dutyOverride;   // PWM5: %5 (kontaktor bu duty'de kapanmaz, relay_core::should_close)
+  }
+
   // Sadece değişiklik varsa uygula
-  if (nextPwmEnabled != pwmEnabled || nextDuty != pwmDutyPercent) {
+  if (nextPwmEnabled != pwmEnabled || nextDuty != pwmDutyPercent || s_wakeCpDirty) {
+    s_wakeCpDirty = false;
     pwmEnabled = nextPwmEnabled;
     pwmDutyPercent = nextDuty;
     pilot_apply_pwm();
 
-    Serial.printf("DURUM DEĞİŞTİ: State=%s, PWM=%s, Duty=%%%d\n",
+    LogOut.printf("DURUM DEĞİŞTİ: State=%s, PWM=%s, Duty=%%%d, CP=%s, I=%.2f A, wake=%s(%u/%u)%s\n",
                   m.stateStable.c_str(),
                   pwmEnabled ? "ON" : "OFF",
-                  pwmDutyPercent);
+                  pwmDutyPercent,
+                  s_wakeCpLow ? "LOW" : "normal",
+                  rawIMax,
+                  evse_wake::phase_name(s_wake.phase()),
+                  (unsigned)s_wake.attempts(), (unsigned)s_wake.config().maxAttempts,
+                  wakeHold ? " [uyandirma darbesi]" : "");
   }
 
-  // Manuel stop modunda latch pulse takibini durdur.
-  // Izin yokken (bulut onayi / planli sarj) de latch takibi atlanir; birakma cloud_loop'ta yapilir.
-  if (g_chargeMode != 2 && chargePermit) {
-    relay_handle_state_pulse(m.stateStable);
+  // Manuel stop modunda latch SET takibini durdur.
+  // Izin yokken (bulut onayi / planli sarj) de latch SET atlanir. Acma her durumda relay_update_auto'da.
+  // Uyandirma darbesi/oturma suresinde latch SET yapilmaz (PWM yokken kontaktor SET edilmez).
+  if (g_chargeMode != 2 && chargePermit && !s_wake.holding()) {
+    relay_handle_state_pulse(m.stateStable, pwmEnabled, pwmDutyPercent);
   }
 
-  // Son role karari burada verilir.
+  // Son role karari burada verilir (acma: akim ~0 / zaman asimi / acil, bkz. relay_core).
   relay_update_auto(m.stateStable, pwmEnabled, pwmDutyPercent);
 }

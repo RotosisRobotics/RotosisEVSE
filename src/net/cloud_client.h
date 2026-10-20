@@ -22,6 +22,10 @@ void cloud_init();
 bool cloud_loop(const String& stableState, float ia, float ib, float ic,
                 float powerW, float energyKWh, uint32_t chargeSeconds, bool schedBlocked);
 
+// Fis cikinca (kararli state A kenari) ana donguden bir kez cagrilir: bulut izni, guvenli
+// durdurma ve bulut STOP kilidi sifirlanir. Yeni sarj normal baslatma akisini gerektirir.
+void cloud_on_vehicle_unplugged();
+
 // Bulut etkin mi (acik + gecerli kod/adres + anahtar ayarli)?
 bool cloud_active();
 bool cloud_require_start();

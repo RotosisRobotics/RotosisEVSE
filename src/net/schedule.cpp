@@ -1,4 +1,5 @@
 #include "schedule.h"
+#include "../log/dev_log.h"
 
 #include <Arduino.h>
 #include <Preferences.h>
@@ -35,7 +36,7 @@ void sched_init() {
   s_cfg = loaded;
   s_dirty = true;
   portEXIT_CRITICAL(&s_mux);
-  Serial.printf("[SCHED] Planli sarj %s, %u aralik\n", loaded.enabled ? "ACIK" : "kapali", (unsigned)loaded.count);
+  LogOut.printf("[SCHED] Planli sarj %s, %u aralik\n", loaded.enabled ? "ACIK" : "kapali", (unsigned)loaded.count);
 }
 
 bool sched_loop() {
@@ -60,7 +61,7 @@ bool sched_loop() {
   s_lastEvalMs = nowMs;
   portEXIT_CRITICAL(&s_mux);
   if (changed) {
-    Serial.printf("[SCHED] Yasakli aralik %s\n", e.blocked ? "BASLADI: sarj bekletiliyor" : "bitti");
+    LogOut.printf("[SCHED] Yasakli aralik %s\n", e.blocked ? "BASLADI: sarj bekletiliyor" : "bitti");
   }
   return e.blocked;
 }
@@ -98,7 +99,7 @@ bool sched_set(const Schedule& s, const char** err) {
   s_cfg = s;
   s_dirty = true;
   portEXIT_CRITICAL(&s_mux);
-  Serial.printf("[SCHED] Ayar kaydedildi: %s, %u aralik\n", s.enabled ? "ACIK" : "kapali", (unsigned)s.count);
+  LogOut.printf("[SCHED] Ayar kaydedildi: %s, %u aralik\n", s.enabled ? "ACIK" : "kapali", (unsigned)s.count);
   return true;
 }
 

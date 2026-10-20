@@ -1,5 +1,6 @@
 ﻿#include "web_ui.h"
 #include <WiFi.h>
+#include "../log/dev_log.h"
 #include <WiFiMulti.h>
 
 #include <ArduinoJson.h>
@@ -18,7 +19,9 @@
 #include "vehicle_top_art_svg.h"
 #include "togg_arac_v2_webp.h"
 #include "pilot/pilot.h"
+#include "pilot/wake_cfg.h"
 #include "io/relay.h"
+#include "io/relay_core.h"
 
 #include "io/current_sensor.h"
 #include "auth.h"
@@ -67,12 +70,6 @@ extern int g_histCount;
 extern int g_histHead;
 extern void resetChargeData(bool clearHistory);
 extern void resetHistoryData();
-
-static void pulseGpio(uint8_t pin) {
-  digitalWrite(pin, HIGH);
-  delay(RELAY_LATCH_PULSE_MS);
-  digitalWrite(pin, LOW);
-}
 
 #ifndef EVSE_AP_SSID
 #define EVSE_AP_SSID "EVSE"
@@ -468,7 +465,7 @@ static void purgeLegacyUserCss() {
   if (!s_resetPrefsReady) return;
   if (s_resetPrefs.isKey("user_css")) {
     s_resetPrefs.remove("user_css");
-    Serial.println("[WEB] Eski ozel CSS kaydi NVS'den silindi");
+    LogOut.println("[WEB] Eski ozel CSS kaydi NVS'den silindi");
   }
 }
 
@@ -525,34 +522,34 @@ static void refreshMdns() {
     if (mdnsStarted) {
       MDNS.end();
       mdnsStarted = false;
-      Serial.println("[mDNS] Stopped");
+      LogOut.println("[mDNS] Stopped");
     }
     return;
   }
 
   if (!mdnsStarted) {
     if (!MDNS.begin(currentHostName())) {
-      Serial.println("[mDNS] Start failed");
+      LogOut.println("[mDNS] Start failed");
       return;
     }
     MDNS.addService("http", "tcp", 80);
     mdnsStarted = true;
-    Serial.print("[mDNS] Ready: http://");
-    Serial.print(currentHostName());
-    Serial.println(".local");
+    LogOut.print("[mDNS] Ready: http://");
+    LogOut.print(currentHostName());
+    LogOut.println(".local");
   }
 }
 
 static void ensureServerStarted() {
   if (s_serverStarted) return;
   if (WiFi.status() != WL_CONNECTED || WiFi.localIP()[0] == 0) return;
-  Serial.println("[WEB] server.begin() delayed start");
+  LogOut.println("[WEB] server.begin() delayed start");
   server.begin();
   s_serverStarted = true;
 }
 
 static void setupArduinoOta() {
-  Serial.println("[OTA] ArduinoOTA ve generic web OTA devre disi; guvenli yukleme /update uzerinden yapilir");
+  LogOut.println("[OTA] ArduinoOTA ve generic web OTA devre disi; guvenli yukleme /update uzerinden yapilir");
 }
 
 // Web API'de gelen tamsayi parametreleri guvenli aralikta tutar.
@@ -1384,7 +1381,7 @@ tr:last-child td{border-bottom:0}
 <!-- AYARLAR (kalibrasyon + istasyon + guvenlik) -->
 <section class="sec" id="calibrationCard">
 <div class="izgara" id="calForm">
-  <div class="kart"><h2>Zamanlama ve limit</h2><div class="f" data-f="lInt|Döngü|ms;stb|Stable count;onD|Röle açma|ms;offD|Röle bırakma|ms;limitASet|Akım limiti 6-32|A"></div></div>
+  <div class="kart"><h2>Zamanlama ve limit</h2><div class="f" data-f="lInt|Döngü|ms;stb|Stable count (×25 ms);onD|Röle açma|ms;offD|Röle bırakma (akım 0 iken)|ms;limitASet|Akım limiti 6-32|A"></div></div>
   <div class="kart"><h2>CP kalibrasyon</h2><div class="f" data-f="div|Divider;thb|TH_B|V;thc|TH_C|V;thd|TH_D|V;the|TH_E|V"></div></div>
   <div class="kart genis"><h2>Akım kalibrasyonu</h2>
     <p class="not">Varsayılan: 0-10 A için Ical 12.0; 10-30 A için ek offset 1.0 A. Tavsiye: rngLowMax 10, rngLowOff 0, rngMidMax 30, rngMidOff 1.</p>
@@ -1434,6 +1431,16 @@ tr:last-child td{border-bottom:0}
     <div id="schedRows"></div>
     <div class="satir"><button class="ik" onclick="schedAdd()">Aralık ekle</button><button class="ik" onclick="schedPeak()">Puant (17–22)</button><button onclick="schedSave()">Kaydet</button></div>
     <p class="not" style="margin:10px 0 0">Türkiye saati (UTC+3). Gece yarısını aşan aralık olabilir (örn. 23:00–06:00); aralık başladığı güne aittir. En çok 3 aralık. Cihaz saati bilinmiyorsa kısıtlama uygulanmaz.</p></div>
+  <div class="kart genis" id="wakeBox"><h2>Araç uyandırma <span class="s rozet" id="wakeTag">-</span></h2>
+    <p class="not">Araç uzun PWM'siz beklemeden (planlı şarj / uygulama onayı) sonra B'de kalırsa denenir. Yalnız durum B, kontaktör açık ve akım yokken.</p>
+    <label class="ck"><input type="checkbox" id="wakeOn">Uyandırma açık</label>
+    <div class="f">
+      <div><label for="wakePreset">Yöntem sırası</label><select id="wakePreset" onchange="wakePresetPick()"><option value="B1">B1 darbesi (PWM kes-ver)</option><option value="F">F darbesi (CP -12V)</option><option value="B1,B1,F">B1 ×2, sonra F (Phoenix benzeri)</option><option value="PWM5">%5 PWM → E/F → nominal (ISO 15118-3)</option><option value="">Özel liste</option></select></div>
+      <div><label for="wakeSeq">Liste (deneme başına)</label><input id="wakeSeq" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="B1,B1,F"></div>
+    </div>
+    <div class="f" data-f="wakeMax|En çok deneme||3;wakeWait|C bekleme|sn|25;wakeB1|B1 süresi|ms|4000;wakeF|F süresi|ms|3000;wakeP5|%5 PWM süresi|ms|3000;wakeEF|E/F süresi|ms|2000"></div>
+    <div class="satir"><button onclick="wakeSave()">Kaydet</button></div>
+    <p class="not" style="margin:10px 0 0">Liste bitince son yöntem tekrarlanır. Durum: <span id="wakeNow">-</span></p></div>
 </div>
 </section>
 
@@ -1464,7 +1471,7 @@ tr:last-child td{border-bottom:0}
     <div class="satir"><button class="iy" onclick="send('/relay?on=1')">Manuel aç</button><button class="th" onclick="send('/relay?on=0')">Manuel bırak</button><button class="ik" onclick="send('/relay_auto?en=1')">Otomatiğe dön</button></div></div>
   <div class="kart"><h2>MOSFET darbe testi</h2>
     <div class="satir"><button class="th" onclick="send('/pulse_reset')">RESET (GPIO 7)</button><button class="iy" onclick="send('/pulse_set')">SET (GPIO 15)</button></div>
-    <p class="not" style="margin:10px 0 0">Her basış 100 ms HIGH darbe gönderir.</p></div>
+    <p class="not" style="margin:10px 0 0">Her basış 100 ms HIGH darbe gönderir. Manuel aç ve SET yalnız durum C/D + PWM açıkken kabul edilir; bırakma/RESET her zaman serbest.</p></div>
 </div>
 </section>
 
@@ -1496,7 +1503,7 @@ tr:last-child td{border-bottom:0}
 <script>
 /* Yetkili uc noktalar: /status /history /charge_cmd /calib_apply /wifi_scan /wifi_apply
    /ota_check /ota_install /boot_prev /boot_factory /relay /relay_auto /pulse_reset /pulse_set
-   /data_reset /api/logout /api/password /api/upload_ticket /api/cloud_cfg /api/schedule -> hepsi "Authorization: Bearer <jeton>" ister, yoksa 401.
+   /data_reset /api/logout /api/password /api/upload_ticket /api/cloud_cfg /api/schedule /api/wake /api/log -> hepsi "Authorization: Bearer <jeton>" ister, yoksa 401.
    Acik: /api/login (POST JSON {user,password} -> {token,ttl,mustChange}; hatada 401 {left}, kilitte 429 {retryAfter}). */
 const PAGE_MODE="__PAGE_MODE__",IDLE_MS=15*60e3,MAX_TRY=5,LOCK_S=60;
 let TOK=null,paused=false,t,last=null,calDirty=false,wifiDirty=false,fails=0,lastAct=Date.now(),idleWarned=false,tries=0,lockUntil=0,pollT=null,idleT=null;
@@ -1592,7 +1599,7 @@ const SECS=['liveCard','statusCard','calibrationCard','wifiCard','testCard','ota
 const HASH={live:'liveCard',admin:'liveCard',status:'statusCard',settings:'calibrationCard',calibration:'calibrationCard',wifi:'wifiCard',test:'testCard',ota:'otaCard'};
 function showPage(id){SECS.forEach(s=>$(s).classList.toggle('on',s===id));
   document.querySelectorAll('a.nav').forEach(a=>a.classList.toggle('active',a.dataset.s===id||(id==='testCard'&&a.id==='navCalibration')));
-  if(id==='statusCard')loadHistory();scrollTo(0,0);}
+  if(id==='statusCard')loadHistory();if(id==='calibrationCard')loadWake();scrollTo(0,0);}
 function applyPageMode(){const m=PAGE_MODE.indexOf('__')===0?'admin':PAGE_MODE;showPage(HASH[location.hash.slice(1)]||HASH[m]||'liveCard');}
 addEventListener('hashchange',()=>{if(TOK)applyPageMode();});
 function refreshAll(){const b=$('refreshBtn');b.classList.add('spin');pull(true);if($('statusCard').classList.contains('on'))loadHistory();setTimeout(()=>b.classList.remove('spin'),800);}
@@ -1646,12 +1653,12 @@ function runBootFactory(){ask.open({t:'Fabrika yazılımına dön',m:'Cihaz kurt
 function runDataReset(){const n=$('rstOptNow').checked,h=$('rstOptHist').checked;if(!n&&!h){toast('En az bir seçenek işaretleyin');return;}
   ask.open({t:'Veriler silinsin mi?',m:'Silinecek: '+[n&&'anlık sayaç',h&&'seans geçmişi'].filter(Boolean).join(' + ')+'. Geri alınamaz.',w:'SIFIRLA',red:1,ok:'Sil',go:()=>call('/data_reset?now='+(+n)+'&hist='+(+h)).then(()=>{toast('Veriler sıfırlandı');pull(true);loadHistory();}).catch(()=>toast('Sıfırlama başarısız'))});}
 function chargeCmd(m){const go=()=>call('/charge_cmd?m='+m).then(()=>{toast(['Otomatik moda alındı','Şarj başlatıldı','Şarj durduruldu'][m]);pull(true);}).catch(()=>toast('Komut gönderilemedi'));
-  if(m===2)ask.open({t:'Şarj durdurulsun mu?',m:'Röle ve PWM hemen kapatılır.',red:1,ok:'Durdur',go});else go();}
+  if(m===2)ask.open({t:'Şarj durdurulsun mu?',m:'PWM hemen kesilir; kontaktör akım sıfırlanınca (en geç 3 sn) açılır.',red:1,ok:'Durdur',go});else go();}
 function loadHistory(){getJSON('/history').then(h=>{const it=(h.items||[]).slice().reverse();$('histBody').innerHTML=it.length?it.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+fmtDate(num(x.s))+'</td><td>'+fmtTime(num(x.d))+'</td><td>'+num(x.e).toFixed(2)+' kWh</td><td>'+(num(x.p)/1000).toFixed(1)+' kW</td><td>'+num(x.ph)+'F</td></tr>').join(''):'<tr><td colspan="6">Kayıt yok</td></tr>';}).catch(()=>{});}
 
 /* --- Ayarlar --- */
 function markCal(){const e=$('calDirty');e.textContent=calDirty?'Kaydedilmemiş değişiklik var':'Değişiklik yok';e.className=calDirty?'kirli':'';}
-$('calForm').addEventListener('input',e=>{if(!/^clamp/.test(e.target.id)){calDirty=true;markCal();}});
+$('calForm').addEventListener('input',e=>{if(!/^(clamp|wake)/.test(e.target.id)){calDirty=true;markCal();}});
 function fillClamp(k){let c=0;['A','B','C'].forEach(ph=>{const ref=num($('clamp'+k+ph).value),live=num($('liveI'+ph).textContent);
   if(k==='Low'&&ref>0&&live>.2){$('ical'+ph).value=(num($('ical'+ph).value,12)*ref/live).toFixed(2);c++;}
   if(k==='Mid'&&ref>0&&live>0){$('ioff'+ph).value=(ref-live).toFixed(2);c++;}});
@@ -1720,6 +1727,22 @@ function schedSave(){if(!SCH)return;const on=$('schedOn').checked,ws=SCH.windows
     .then(x=>x.json().catch(()=>({})).then(j=>{if(!x.ok)throw new Error(j.error||('HTTP '+x.status));schedDirty=false;SCH=null;renderSched(j);toast('Planlı şarj kaydedildi');pull(true);})).catch(e=>toast(e.message));
   if(on)ask.open({t:'Planlı şarj açılsın mı?',m:'Yasaklı saatlerde şarj güvenle durdurulur, araç bağlıysa aralık bitince kendiliğinden devam eder.',ok:'Kaydet',go});else go();}
 
+/* --- Arac uyandirma (/api/wake) --- */
+let wakeDirty=false;
+['wakeOn','wakeSeq','wakeMax','wakeWait','wakeB1','wakeF','wakeP5','wakeEF','wakePreset'].forEach(i=>$(i).addEventListener('input',()=>{wakeDirty=true;}));
+function wakePresetPick(){const v=$('wakePreset').value;if(v)$('wakeSeq').value=v;wakeDirty=true;}
+function renderWake(w,force){if(!w)return;const tg=$('wakeTag');tg.className='s rozet '+(w.on?(w.phase!=='Idle'?'uyari':'iyi'):'');tg.textContent=w.on?(w.phase!=='Idle'?'Çalışıyor':'Açık'):'Kapalı';
+  T('wakeNow',w.phase+(w.attempt?' ('+w.attempt+'/'+w.max+')':''));
+  if(wakeDirty&&!force)return;setInput('wakeOn',!!w.on,true);setInput('wakeSeq',w.seq||'B1',true);
+  const pr=$('wakePreset');pr.value=[...pr.options].some(o=>o.value===w.seq)?w.seq:'';
+  setInput('wakeMax',w.max,true);setInput('wakeWait',Math.round(num(w.waitMs)/1000),true);setInput('wakeB1',w.b1Ms,true);setInput('wakeF',w.fMs,true);setInput('wakeP5',w.pwm5Ms,true);setInput('wakeEF',w.efMs,true);}
+function loadWake(){getJSON('/api/wake').then(w=>renderWake(w,false)).catch(()=>{});}
+function wakeSave(){const seq=$('wakeSeq').value.trim().toUpperCase().replace(/\s+/g,'');
+  if(!/^(B1|F|PWM5)(,(B1|F|PWM5)){0,5}$/.test(seq)){toast('Liste örn. B1 | F | PWM5 | B1,B1,F (en çok 6)');return;}
+  const b={on:$('wakeOn').checked,seq:seq,max:Math.round(num($('wakeMax').value)),waitMs:Math.round(num($('wakeWait').value)*1000),b1Ms:Math.round(num($('wakeB1').value)),fMs:Math.round(num($('wakeF').value)),pwm5Ms:Math.round(num($('wakeP5').value)),efMs:Math.round(num($('wakeEF').value))};
+  api('/api/wake',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
+  .then(x=>x.json().catch(()=>({})).then(j=>{if(!x.ok)throw new Error(j.error||('HTTP '+x.status));wakeDirty=false;renderWake(j,true);toast('Uyandırma ayarı kaydedildi');})).catch(e=>toast(e.message));}
+
 /* --- Wi-Fi --- */
 $('wifiCard').addEventListener('input',()=>{wifiDirty=true;});
 function toggleWifiModeFields(){$('wifiStaticFields').hidden=$('wifiModeCfg').value!=='static';}
@@ -1755,38 +1778,38 @@ static void setupWiFi() {
   refreshDeviceIdentity();
   WiFi.setHostname(currentHostName());
   WiFi.softAPdisconnect(true);
-  Serial.println("[WiFi] AP kapali, sadece STA modu aktif.");
-  Serial.print("[WiFi] Hostname: ");
-  Serial.println(currentHostName());
+  LogOut.println("[WiFi] AP kapali, sadece STA modu aktif.");
+  LogOut.print("[WiFi] Hostname: ");
+  LogOut.println(currentHostName());
 
   if (!wifiEventsReady) {
     wifiEventsReady = true;
     WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
-      Serial.print("[WiFi] Event: ");
-      Serial.println((int)event);
+      LogOut.print("[WiFi] Event: ");
+      LogOut.println((int)event);
       if (event == ARDUINO_EVENT_WIFI_STA_CONNECTED) {
-        Serial.print("[WiFi] Connected SSID: ");
-        Serial.println(WiFi.SSID());
+        LogOut.print("[WiFi] Connected SSID: ");
+        LogOut.println(WiFi.SSID());
       } else if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
-        Serial.print("[WiFi] Disconnected, reason: ");
-        Serial.println((int)info.wifi_sta_disconnected.reason);
+        LogOut.print("[WiFi] Disconnected, reason: ");
+        LogOut.println((int)info.wifi_sta_disconnected.reason);
       } else if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
-        Serial.print("[WiFi] Got IP: ");
-        Serial.println(WiFi.localIP());
+        LogOut.print("[WiFi] Got IP: ");
+        LogOut.println(WiFi.localIP());
       }
     });
   }
 
-  Serial.println("\nWi-Fi aglari eklendi:");
+  LogOut.println("\nWi-Fi aglari eklendi:");
   size_t addedWifiCount = 0;
   rebuildKnownWifiList();
   for (size_t i = 0; i < (sizeof(kKnownWifis) / sizeof(kKnownWifis[0])); i++) {
     if (!hasText(kKnownWifis[i].ssid)) continue;
     addedWifiCount++;
-    Serial.printf(" - %s (%s)\n", kKnownWifis[i].location, kKnownWifis[i].ssid);
+    LogOut.printf(" - %s (%s)\n", kKnownWifis[i].location, kKnownWifis[i].ssid);
   }
   if (addedWifiCount == 0) {
-    Serial.println(" - STA listesi bos.");
+    LogOut.println(" - STA listesi bos.");
   }
 
   bool connected = connectConfiguredWifi(5000);
@@ -1795,19 +1818,19 @@ static void setupWiFi() {
   }
 
   if (connected) {
-    Serial.println("");
-    Serial.println("WiFi Baglandi!");
-    Serial.print("Konum: ");
-    Serial.println(wifiLocationForSsid(WiFi.SSID()));
-    Serial.println("IP adresi: ");
-    Serial.println(WiFi.localIP());
+    LogOut.println("");
+    LogOut.println("WiFi Baglandi!");
+    LogOut.print("Konum: ");
+    LogOut.println(wifiLocationForSsid(WiFi.SSID()));
+    LogOut.println("IP adresi: ");
+    LogOut.println(WiFi.localIP());
   }
 
-  Serial.println("[WiFi] Kendi AP yayini kapali.");
+  LogOut.println("[WiFi] Kendi AP yayini kapali.");
   if (s_mdnsEnabled) {
     refreshMdns();
   } else {
-    Serial.println("[mDNS] Test icin gecici olarak devre disi");
+    LogOut.println("[mDNS] Test icin gecici olarak devre disi");
   }
 }
 
@@ -2003,7 +2026,7 @@ static void failManualOta(const String& reason) {
   }
   s_manualOta.success = false;
   s_manualOta.lastError = reason;
-  Serial.printf("[OTA] Manual upload reddedildi: %s\n", reason.c_str());
+  LogOut.printf("[OTA] Manual upload reddedildi: %s\n", reason.c_str());
 }
 
 // /update sayfasi: panelden alinan 60 sn'lik tek kullanimlik ?t= biletiyle acilir.
@@ -2073,7 +2096,7 @@ static void handleManualUpdateUpload() {
               auth_check_bearer(server.header("Authorization"));
     if (!ok) {
       s_manualOta.lastError = "Yetkisiz yukleme: panelden yeniden '.bin yukle' ile acin";
-      Serial.println("[OTA] Manual upload reddedildi: yetkisiz");
+      LogOut.println("[OTA] Manual upload reddedildi: yetkisiz");
       return;  // active=false kalir; sonraki parcalar yok sayilir
     }
     s_manualOta.authorized = true;
@@ -2088,7 +2111,7 @@ static void handleManualUpdateUpload() {
       return;
     }
 
-    Serial.printf("[OTA] Manual upload basladi: %s\n", upload.filename.c_str());
+    LogOut.printf("[OTA] Manual upload basladi: %s\n", upload.filename.c_str());
     return;
   }
 
@@ -2103,7 +2126,7 @@ static void handleManualUpdateUpload() {
         return;
       }
       s_manualOta.updateBegun = true;
-      Serial.printf("[OTA] Manual upload ota slotuna kabul edildi: %s\n", s_manualOta.uploadedName.c_str());
+      LogOut.printf("[OTA] Manual upload ota slotuna kabul edildi: %s\n", s_manualOta.uploadedName.c_str());
     }
 
     if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
@@ -2123,7 +2146,7 @@ static void handleManualUpdateUpload() {
       return;
     }
     s_manualOta.success = true;
-    Serial.printf("[OTA] Manual upload tamamlandi: %s (%u bytes)\n",
+    LogOut.printf("[OTA] Manual upload tamamlandi: %s (%u bytes)\n",
                   s_manualOta.uploadedName.c_str(),
                   (unsigned)upload.totalSize);
     return;
@@ -2507,14 +2530,16 @@ static void handleChargeCmd() {
   int mode = clampIntArg(server.arg("m"), 0, 2);
   g_chargeMode = mode;
 
-  // "Sarji Durdur" isteginde bir sonraki loop'u beklemeden cikislari hemen kapat.
+  // "Sarji Durdur": PWM hemen kesilir (arac akimi keser, C->B yapar). Kontaktor yumusak durdurma
+  // yoluyla acilir: akim ~0 olunca / arac B'ye gecince, en gec 3 sn (relay_update_auto, relay_core).
   if (mode == 2) {
     g_manualStopAlertUntilMs = millis() + 10000UL;
     g_manualStopAutoResumeAtMs = millis() + 60000UL;
     pwmEnabled = false;
     pwmDutyPercent = 0;
     pilot_apply_pwm();
-    relay_force_off_now();
+    LogOut.printf("[STOP] Panel STOP: PWM kesildi (st=%s); kontaktor akim sifirlaninca acilacak (en gec 3 sn)\n",
+                  pilot_get().stateStable.c_str());
     digitalWrite(ERROR_LED_PIN, HIGH);
   } else {
     g_manualStopAlertUntilMs = 0;
@@ -2667,10 +2692,26 @@ static void handleCalibApply() {
   noteHttpResponseSent();
 }
 
+// Elle kontaktor KAPATMA yalniz durum C/D + PWM acik (sarj duty'si) iken; acma/birakma serbest.
+static bool manualCloseAllowedOrReject(const char* what) {
+  PilotMeasurements m = pilot_get();
+  char st = m.stateStable.length() > 0 ? m.stateStable[0] : 'F';
+  if (evse_relay::manual_close_allowed(st, pwmEnabled, pwmDutyPercent)) return true;
+  LogOut.printf("[ROLE] %s REDDEDILDI: kontaktor yalniz durum C/D + PWM acikken kapatilabilir (st=%c PWM=%s duty=%d)\n",
+                what, st, pwmEnabled ? "ON" : "OFF", pwmDutyPercent);
+  server.send(409, "text/plain", "Reddedildi: kontaktor yalniz durum C/D ve PWM acikken kapatilabilir");
+  noteHttpResponseSent();
+  return false;
+}
+
 static void handleRelay() {
   noteWebActivity();
   if (!requireAdminAuth()) return;
-  if (server.hasArg("on")) relay_set(server.arg("on") == "1");
+  if (server.hasArg("on")) {
+    bool on = server.arg("on") == "1";
+    if (on && !manualCloseAllowedOrReject("/relay?on=1")) return;
+    relay_set(on);
+  }
   server.send(200, "text/plain", "OK");
   noteHttpResponseSent();
 }
@@ -2685,14 +2726,15 @@ static void handleRelayAuto() {
 
 static void handlePulseReset() {
   if (!requireAdminAuth()) return;
-  pulseGpio(MOSFET_RESET_PIN);
+  relay_latch_manual_reset();
   server.send(200, "text/plain", "OK");
   noteHttpResponseSent();
 }
 
 static void handlePulseSet() {
   if (!requireAdminAuth()) return;
-  pulseGpio(MOSFET_SET_PIN);
+  if (!manualCloseAllowedOrReject("/pulse_set")) return;
+  relay_latch_manual_set();
   server.send(200, "text/plain", "OK");
   noteHttpResponseSent();
 }
@@ -2941,15 +2983,131 @@ static void handleApiSchedulePost() {
   noteHttpResponseSent();
 }
 
+// GET /api/wake (Bearer) -> arac uyandirma ayari + calisan durum
+// POST /api/wake {on?, seq?:"B1,B1,F", max?, waitMs?, b1Ms?, fMs?, pwm5Ms?, efMs?} (eksik alan korunur)
+//   -> 200 durum | 400 {error}
+static void handleApiWakeGet() {
+  noteWebActivity();
+  if (!requireAdminAuth()) return;
+  char out[256];
+  wake_status_json(out, sizeof(out));
+  sendJsonNoStore(200, out[0] ? out : "{}");
+  noteHttpResponseSent();
+}
+
+static void handleApiWakePost() {
+  noteWebActivity();
+  if (!requireAdminAuth()) return;
+  const String& body = server.arg("plain");
+  StaticJsonDocument<384> doc;
+  if (body.length() == 0 || body.length() > 300 || deserializeJson(doc, body) != DeserializationError::Ok ||
+      !doc.is<JsonObject>()) {
+    sendJsonNoStore(400, "{\"error\":\"Gecersiz istek\"}");
+    return;
+  }
+  evse_wake::Config c = wake_cfg_get();
+  JsonVariant v;
+  v = doc["on"];
+  if (!v.isNull()) {
+    if (!v.is<bool>()) { sendJsonNoStore(400, "{\"error\":\"on true/false olmali\"}"); return; }
+    c.enabled = v.as<bool>();
+  }
+  v = doc["seq"];
+  if (!v.isNull()) {
+    if (!v.is<const char*>() || !evse_wake::parse_seq(v.as<const char*>(), &c)) {
+      sendJsonNoStore(400, "{\"error\":\"seq ornek: B1 | F | PWM5 | B1,B1,F (en cok 6)\"}");
+      return;
+    }
+  }
+  struct { const char* key; uint32_t* dst; } nums[] = {
+    {"waitMs", &c.waitMs}, {"b1Ms", &c.b1Ms}, {"fMs", &c.fMs}, {"pwm5Ms", &c.pwm5Ms}, {"efMs", &c.efMs},
+  };
+  for (auto& n : nums) {
+    v = doc[n.key];
+    if (v.isNull()) continue;
+    if (!v.is<long>() || v.as<long>() < 0) {
+      String out = String("{\"error\":\"") + n.key + " sayi (ms) olmali\"}";
+      sendJsonNoStore(400, out);
+      return;
+    }
+    *n.dst = (uint32_t)v.as<long>();
+  }
+  v = doc["max"];
+  if (!v.isNull()) {
+    if (!v.is<long>() || v.as<long>() < 1 || v.as<long>() > 10) {
+      sendJsonNoStore(400, "{\"error\":\"max 1-10 olmali\"}");
+      return;
+    }
+    c.maxAttempts = (uint8_t)v.as<long>();
+  }
+  const char* err = "";
+  if (!wake_cfg_set(c, &err)) {
+    String out = String("{\"error\":\"") + err + "\"}";
+    sendJsonNoStore(400, out);
+    return;
+  }
+  char out[256];
+  wake_status_json(out, sizeof(out));
+  sendJsonNoStore(200, out[0] ? out : "{}");
+  noteHttpResponseSent();
+}
+
+// GET /api/log[?since=N] (Bearer) -> text/plain: RAM halka tamponundaki seri log satirlari.
+// Her satir "<seq> [uptime_sn.ms HH:MM:SS] metin". since=N: yalniz seq > N olan satirlar.
+// Basliklar: X-Log-First (tampondaki en eski seq), X-Log-Last (bu yanittaki son seq; sonraki
+// istekte since olarak verin), X-Log-Next. Arada satir kaybolduysa ilk satir "# ..." uyarisidir.
+static void handleApiLog() {
+  noteWebActivity();
+  if (!requireAdminAuth()) return;
+  uint32_t since = 0;
+  if (server.hasArg("since")) {
+    const String& s = server.arg("since");
+    char* endp = nullptr;
+    unsigned long v = strtoul(s.c_str(), &endp, 10);
+    if (s.length() == 0 || endp == nullptr || *endp != '\0') {
+      server.send(400, "text/plain", "since sayi olmali\n");
+      return;
+    }
+    since = (uint32_t)v;
+  }
+  // Gecici yanit tamponu: tampon boyutu + seq onekleri. Heap darsa kucult (artimli okuma devam eder).
+  size_t cap = kDevLogBufBytes + 2048;
+  size_t maxAlloc = ESP.getMaxAllocHeap();
+  if (maxAlloc < cap + 16384) cap = (maxAlloc > 16384 + 1024) ? (maxAlloc - 16384) : 1024;
+  if (cap > kDevLogBufBytes + 2048) cap = kDevLogBufBytes + 2048;
+  char* buf = (char*)malloc(cap);
+  if (buf == nullptr) {
+    server.send(503, "text/plain", "bellek yok\n");
+    return;
+  }
+  uint32_t lastSeq = 0, firstSeq = 0, nextSeq = 0;
+  size_t n = devlog_read(since, buf, cap, &lastSeq, &firstSeq, &nextSeq);
+  char lost[96] = "";
+  if (nextSeq != 0 && since + 1 < firstSeq && since != 0) {
+    snprintf(lost, sizeof(lost), "# %lu satir kayboldu (tampon tasti); en eski seq=%lu\n",
+             (unsigned long)(firstSeq - since - 1), (unsigned long)firstSeq);
+  }
+  server.sendHeader("X-Log-First", String(firstSeq));
+  server.sendHeader("X-Log-Last", String(lastSeq));
+  server.sendHeader("X-Log-Next", String(nextSeq));
+  size_t lostLen = strlen(lost);
+  server.setContentLength(lostLen + n);
+  server.send(200, "text/plain; charset=utf-8", "");
+  if (lostLen) server.sendContent(lost, lostLen);
+  if (n) server.sendContent(buf, n);
+  free(buf);
+  noteHttpResponseSent();
+}
+
 // 4) Route kayitlari ve servis baslatma.
 void web_init() {
   // Boot sirasinda ag, OTA, route ve web server bu noktada ayaga kalkar.
-  Serial.println("[WEB] web_init start");
+  LogOut.println("[WEB] web_init start");
   s_resetPrefsReady = s_resetPrefs.begin("evse", false);
   if (s_resetPrefsReady) {
     loadResetStats();
   } else {
-    Serial.println("[RST] NVS init fail");
+    LogOut.println("[RST] NVS init fail");
   }
   loadWifiSettings();
   loadCurrentLimitSetting();
@@ -2958,10 +3116,13 @@ void web_init() {
   auth_init();
   setupWiFi();
   setupArduinoOta();
+#if RELAY_USE_LATCH_PINS
+  // Yalniz latch kartlarinda (SC_1). SC_2'de bu pinler akim sensoru / PP girisidir.
   pinMode(MOSFET_RESET_PIN, OUTPUT);
   pinMode(MOSFET_SET_PIN, OUTPUT);
   digitalWrite(MOSFET_RESET_PIN, LOW);
   digitalWrite(MOSFET_SET_PIN, LOW);
+#endif
   // HTTP route kayitlari.
   server.on("/", HTTP_GET, handleRoot);
   server.on("/admin", HTTP_GET, handleAdmin);
@@ -2995,6 +3156,9 @@ void web_init() {
   server.on("/api/cloud_cfg", HTTP_POST, handleApiCloudCfg);
   server.on("/api/schedule", HTTP_GET, handleApiScheduleGet);
   server.on("/api/schedule", HTTP_POST, handleApiSchedulePost);
+  server.on("/api/log", HTTP_GET, handleApiLog);
+  server.on("/api/wake", HTTP_GET, handleApiWakeGet);
+  server.on("/api/wake", HTTP_POST, handleApiWakePost);
   server.on("/status_public", HTTP_GET, handleStatusPublic);
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/history", HTTP_GET, handleHistory);
@@ -3019,13 +3183,13 @@ void web_init() {
       1
     );
     if (taskOk == pdPASS) {
-      Serial.println("[WEB] web task started");
+      LogOut.println("[WEB] web task started");
     } else {
       s_webTaskHandle = nullptr;
-      Serial.println("[WEB] web task start FAILED");
+      LogOut.println("[WEB] web task start FAILED");
     }
   }
-  Serial.println("[WEB] web_init done");
+  LogOut.println("[WEB] web_init done");
 }
 
 static void web_tick() {
@@ -3036,7 +3200,7 @@ static void web_tick() {
 
   if (s_manualOtaRebootPending && (int32_t)(millis() - s_manualOtaRebootAtMs) >= 0) {
     s_manualOtaRebootPending = false;
-    Serial.println("[BOOTCTL] Web komutu sonrasi yeniden baslatiliyor");
+    LogOut.println("[BOOTCTL] Web komutu sonrasi yeniden baslatiliyor");
     delay(100);
     ESP.restart();
   }
@@ -3060,21 +3224,21 @@ static void web_tick() {
   if (WiFi.status() == WL_CONNECTED) {
     if (!printed) {
       printed = true;
-      Serial.print("STA SSID: ");
-      Serial.println(WiFi.SSID());
-      Serial.print("STA IP: ");
-      Serial.println(WiFi.localIP());
-      Serial.print("HOST: http://");
-      Serial.print(currentHostName());
-      Serial.println(".local");
+      LogOut.print("STA SSID: ");
+      LogOut.println(WiFi.SSID());
+      LogOut.print("STA IP: ");
+      LogOut.println(WiFi.localIP());
+      LogOut.print("HOST: http://");
+      LogOut.print(currentHostName());
+      LogOut.println(".local");
     }
   } else {
     printed = false; 
     const uint32_t now = millis();
     if (now - lastStatusPrintMs >= 30000) {
       lastStatusPrintMs = now;
-      Serial.print("[WiFi] Status: ");
-      Serial.println((int)WiFi.status());
+      LogOut.print("[WiFi] Status: ");
+      LogOut.println((int)WiFi.status());
     }
   }
 

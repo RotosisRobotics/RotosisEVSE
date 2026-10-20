@@ -10,6 +10,9 @@ float current_sensor_get_irms_a();
 float current_sensor_get_irms_b();
 float current_sensor_get_irms_c();
 float current_sensor_get_irms_total();
+// Kontaktor acma karari icin kisa, filtresiz (EMA/ofset yok) anlik olcum: etkin fazlarin en buyugu (A).
+// Ana dongu degerleri ~1,2 sn gecikmeli ve EMA'li oldugundan "akim simdi var mi" sorusu icin kullanilmaz.
+float current_sensor_quick_max_a();
 
 // Kalibrasyon verisi
 void current_sensor_set_calibration(float calA, float calB, float calC,

@@ -1,4 +1,5 @@
 #include "auth.h"
+#include "../log/dev_log.h"
 
 #include <Preferences.h>
 #include <esp_system.h>
@@ -116,14 +117,14 @@ void auth_init() {
   }
 #if defined(EVSE_AUTH_RESET_PASSWORD) && EVSE_AUTH_RESET_PASSWORD
   loaded = false;
-  Serial.println("[AUTH] EVSE_AUTH_RESET_PASSWORD: parola varsayilana donduruluyor");
+  LogOut.println("[AUTH] EVSE_AUTH_RESET_PASSWORD: parola varsayilana donduruluyor");
 #endif
   if (!loaded) {
     const char* def = EVSE_ADMIN_PASSWORD;
     if (!setPassword(def, strlen(def), true)) {
-      Serial.println("[AUTH] UYARI: varsayilan parola NVS'ye yazilamadi (RAM'de gecerli)");
+      LogOut.println("[AUTH] UYARI: varsayilan parola NVS'ye yazilamadi (RAM'de gecerli)");
     } else {
-      Serial.println("[AUTH] Varsayilan panel parolasi olusturuldu; ilk giriste degistirin");
+      LogOut.println("[AUTH] Varsayilan panel parolasi olusturuldu; ilk giriste degistirin");
     }
   }
   s_sessions.clear();
@@ -148,7 +149,7 @@ AuthLoginResult auth_login(const char* user, const char* password, char tokenHex
   uint8_t left = s_limiter.registerFailure(millis());
   if (left == 0) {
     if (info) *info = s_limiter.retryAfterSec(millis());
-    Serial.println("[AUTH] Cok fazla hatali giris; panel girisi gecici olarak kilitlendi");
+    LogOut.println("[AUTH] Cok fazla hatali giris; panel girisi gecici olarak kilitlendi");
     return AuthLoginResult::Locked;
   }
   if (info) *info = left;
@@ -190,7 +191,7 @@ AuthPwResult auth_change_password(const char* current, const char* next, char to
   s_sessions.clear();
   s_uploadTicket.clear();
   newSession(tokenHex);
-  Serial.println("[AUTH] Panel parolasi degistirildi; diger oturumlar kapatildi");
+  LogOut.println("[AUTH] Panel parolasi degistirildi; diger oturumlar kapatildi");
   return AuthPwResult::Ok;
 }
 

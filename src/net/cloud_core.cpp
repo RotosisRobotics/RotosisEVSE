@@ -117,8 +117,9 @@ int build_poll_json(char* out, size_t outLen, const char* code, const char* secr
   if (t.paused && t.resumeInSec >= 0 && t.resumeInSec <= 604800) snprintf(resume, sizeof(resume), "%ld", (long)t.resumeInSec);
   if (t.schedNextChangeInSec >= 0 && t.schedNextChangeInSec <= 604800)
     snprintf(nextCh, sizeof(nextCh), "%ld", (long)t.schedNextChangeInSec);
-  int k = snprintf(out + n, outLen - n, ",\"paused\":%s,\"pauseReason\":%s,\"resumeInSec\":%s",
-                   t.paused ? "true" : "false", t.paused ? "\"schedule\"" : "null", resume);
+  int k = snprintf(out + n, outLen - n, ",\"paused\":%s,\"pauseReason\":%s,\"resumeInSec\":%s,\"authWait\":%s",
+                   t.paused ? "true" : "false", t.paused ? "\"schedule\"" : "null", resume,
+                   t.authWait ? "true" : "false");
   if (k < 0 || (size_t)(n + k) >= outLen) { out[0] = '\0'; return -1; }
   n += k;
   k = snprintf(out + n, outLen - n, ",\"sched\":{\"on\":%s,\"blocked\":%s,\"timeOk\":%s,\"nextChangeInSec\":%s}",
@@ -139,13 +140,21 @@ int build_poll_json(char* out, size_t outLen, const char* code, const char* secr
 bool parse_poll_response(const char* body, size_t len, PollResponse& out) {
   out = PollResponse();
   if (body == nullptr || len == 0 || len > 1024) return false;
-  StaticJsonDocument<384> doc;
+  StaticJsonDocument<512> doc;
   if (deserializeJson(doc, body, len) != DeserializationError::Ok) return false;
   if (!doc.is<JsonObject>()) return false;
   JsonVariantConst okV = doc["ok"];
   if (!okV.is<bool>()) return false;
   out.ok = okV.as<bool>();
   out.t = doc["t"] | (int64_t)0;
+  // Seans bildirimi (istege bagli). Bool degilse bilinmiyor sayilir.
+  JsonVariantConst asV = doc["activeSession"];
+  if (asV.is<bool>()) {
+    out.hasSession = true;
+    out.activeSession = asV.as<bool>();
+    JsonVariantConst sidV = doc["sessionId"];
+    out.sessionId = (out.activeSession && sidV.is<int64_t>()) ? sidV.as<int64_t>() : 0;
+  }
   JsonVariantConst cmd = doc["cmd"];
   if (cmd.isNull()) return true;
   if (!cmd.is<JsonObjectConst>()) return false;
@@ -161,6 +170,13 @@ bool parse_poll_response(const char* body, size_t len, PollResponse& out) {
   else if (strcmp(type, "set_limit") == 0) out.type = CmdType::SetLimit;
   else out.type = CmdType::Unknown;
   return true;
+}
+
+SessionVerdict session_verdict(bool parsedOk, const PollResponse& r, bool cmdInFlight) {
+  if (!parsedOk || !r.ok || !r.hasSession) return SessionVerdict::Unknown;
+  // Komutla yaris: start ack'i sunucuya ulasmadan "seans yok", stop ack'i ulasmadan "seans var" gelebilir.
+  if (r.hasCmd || cmdInFlight) return SessionVerdict::Unknown;
+  return r.activeSession ? SessionVerdict::Active : SessionVerdict::None;
 }
 
 const char* cmd_type_name(CmdType t) {
@@ -218,6 +234,24 @@ bool SafeGate::on_start(char state, bool requireCloudStart) {
   if (!vehiclePresentOk(state)) return false;
   if (requireCloudStart) authorized_ = true;
   return true;
+}
+
+SafeGate::SyncResult SafeGate::on_server_session(SessionVerdict v, bool requireCloudStart, char state,
+                                                 bool localStop, bool unplugReported) {
+  if (!requireCloudStart) return SyncResult::NoChange;  // update() izni zaten tutmaz
+  switch (v) {
+    case SessionVerdict::Active:
+      if (authorized_) return SyncResult::NoChange;
+      if (!vehiclePresentOk(state) || localStop || !unplugReported) return SyncResult::NoChange;
+      authorized_ = true;
+      return SyncResult::Restored;
+    case SessionVerdict::None:
+      if (!authorized_) return SyncResult::NoChange;
+      authorized_ = false;
+      return SyncResult::Revoked;
+    default:
+      return SyncResult::NoChange;
+  }
 }
 
 bool SafeGate::on_stop() {
