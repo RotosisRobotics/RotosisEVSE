@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include "../log/dev_log.h"
 #include <WiFiMulti.h>
+#include <DNSServer.h>
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -371,10 +372,13 @@ static void saveLocationSettings() {
   s_resetPrefs.putString("stationLabel", s_stationLabelCustom ? String(s_stationCustomLabel) : String(""));
 }
 
+static bool s_staDisabled = false;  // panelden "istemciyi kapat": Wi-Fi'a baglanma, yalniz AP (kalici, NVS "sta_off")
+
 static void loadWifiSettings() {
   if (!s_resetPrefsReady) return;
+  s_staDisabled = s_resetPrefs.getBool("sta_off", false);
   s_customWifiEnabled = s_resetPrefs.getBool("wifi_en", false);
-  s_wifiUseDhcp = s_resetPrefs.getBool("wifi_dhcp", true);
+  s_wifiUseDhcp = true;  // statik IP kaldirildi: her zaman DHCP
   s_customWifiSsid = s_resetPrefs.getString("wifi_ssid", "");
   s_customWifiPassword = s_resetPrefs.getString("wifi_pass", "");
 
@@ -408,7 +412,7 @@ static void rebuildKnownWifiList() {
 }
 
 static void applyIpMode() {
-  if (s_customWifiEnabled && !s_wifiUseDhcp) {
+  if (false) {  // statik IP kaldirildi
     WiFi.config(s_staticIp, s_staticGateway, s_staticSubnet, s_staticDns1, s_staticDns2);
   } else {
     WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE, INADDR_NONE);
@@ -540,9 +544,11 @@ static void refreshMdns() {
   }
 }
 
+static bool s_rescueApActive = false;
+
 static void ensureServerStarted() {
   if (s_serverStarted) return;
-  if (WiFi.status() != WL_CONNECTED || WiFi.localIP()[0] == 0) return;
+  if (!s_rescueApActive && (WiFi.status() != WL_CONNECTED || WiFi.localIP()[0] == 0)) return;
   LogOut.println("[WEB] server.begin() delayed start");
   server.begin();
   s_serverStarted = true;
@@ -1456,7 +1462,8 @@ tr:last-child td{border-bottom:0}
       <div><label for="wifiModeCfg">IP modu</label><select id="wifiModeCfg" onchange="toggleWifiModeFields()"><option value="dhcp">DHCP</option><option value="static">Statik</option></select></div>
     </div>
     <div id="wifiStaticFields" class="f" data-f="wifiIpCfg|IP||192.168.1.200;wifiGwCfg|Gateway||192.168.1.1;wifiSubnetCfg|Subnet||255.255.255.0;wifiDns1Cfg|DNS1||8.8.8.8;wifiDns2Cfg|DNS2||1.1.1.1"></div>
-    <button onclick="applyWifiSettings()">Kaydet ve bağlan</button></div>
+    <button onclick="applyWifiSettings()">Kaydet ve bağlan</button>
+    <div class="satir" style="margin-top:12px"><button class="th" onclick="wifiClient(0)">İstemciyi kapat (AP aç)</button><button class="ik" onclick="wifiClient(1)">İstemciyi aç</button></div></div>
   <div class="kart"><h2>Çevredeki ağlar <button class="s ik" onclick="scanWifiList()">Tara</button></h2>
     <p class="not" id="wifiScanStatus">Tarama hazır değil</p><div id="wifiScanList" class="wl"></div></div>
 </div>
@@ -1755,6 +1762,7 @@ function renderWifiScanList(items){const h=$('wifiScanList');if(!items||!items.l
   items.sort((a,b)=>b.rssi-a.rssi);h.innerHTML=items.map(it=>'<div class="wi">'+bars(num(it.rssi))+'<span class="n">'+esc(it.ssid||'(gizli)')+'</span><span class="s">'+num(it.rssi)+' dBm</span><button class="ik" type="button" onclick="pickWifiSsid('+esc(JSON.stringify(String(it.ssid||'')))+')">Seç</button></div>').join('');}
 function pickWifiSsid(s){$('wifiSsidCfg').value=s;$('wifiEnabled').checked=true;wifiDirty=true;$('wifiPassCfg').focus();}
 function scanWifiList(){T('wifiScanStatus','Tarama yapılıyor…');getJSON('/wifi_scan').then(d=>{renderWifiScanList(d.items||[]);T('wifiScanStatus','Tarama tamamlandı · '+(d.items||[]).length+' ağ');}).catch(()=>T('wifiScanStatus','Tarama başarısız'));}
+function wifiClient(on){ask.open({t:on?'Wi-Fi istemcisi açılsın mı?':'Wi-Fi istemcisi kapatılsın mı?',m:on?'Cihaz kayıtlı ağa yeniden bağlanmayı dener, AP kapanır.':'Cihaz ağdan ayrılır ve kendi AP ağını açar (RTEv-SC1-…, 192.168.4.1). Bu sayfaya erişim kesilir. Bu ayar kalıcıdır; tekrar açmak için AP panelinden "İstemciyi aç" deyin.',ok:on?'Aç':'Kapat',go:()=>call('/wifi_client?on='+on).then(()=>toast(on?'İstemci açıldı':'İstemci kapatıldı, AP açılıyor')).catch(()=>toast('İşlem başarısız'))});}
 function applyWifiSettings(){const q=new URLSearchParams(),v=id=>$(id).value;
   q.append('wifiEnabled',$('wifiEnabled').checked?'1':'0');q.append('wifiSsid',v('wifiSsidCfg'));q.append('wifiPass',v('wifiPassCfg'));q.append('wifiDhcp',v('wifiModeCfg')==='static'?'0':'1');
   ['Ip','Gw','Subnet','Dns1','Dns2'].forEach(k=>q.append('wifi'+k,v('wifi'+k+'Cfg')));
@@ -1812,8 +1820,23 @@ static void setupWiFi() {
     LogOut.println(" - STA listesi bos.");
   }
 
-  bool connected = connectConfiguredWifi(5000);
-  if (!connected && addedWifiCount > 0 && wifiMulti.run(1500) == WL_CONNECTED) {
+  {
+    // TESHIS: gorunen aglari kanal/RSSI/sifreleme ile logla.
+    int n = WiFi.scanNetworks(false, true);
+    LogOut.printf("[SCAN] %d ag bulundu\n", n);
+    for (int i = 0; i < n; i++) {
+      LogOut.printf("[SCAN] %s ch=%d rssi=%d auth=%d bssid=%s\n", WiFi.SSID(i).c_str(), WiFi.channel(i),
+                    WiFi.RSSI(i), (int)WiFi.encryptionType(i), WiFi.BSSIDstr(i).c_str());
+    }
+    WiFi.scanDelete();
+  }
+
+  if (s_staDisabled) {
+    WiFi.setAutoReconnect(false);
+    LogOut.println("[WiFi] Istemci kapali (kalici ayar), yalniz AP acilacak.");
+  }
+  bool connected = !s_staDisabled && connectConfiguredWifi(5000);
+  if (!s_staDisabled && !connected && addedWifiCount > 0 && wifiMulti.run(1500) == WL_CONNECTED) {
     connected = true;
   }
 
@@ -1934,6 +1957,18 @@ static void handleWifiScan() {
   server.send(200, "application/json", s_lastWifiScanJson);
 }
 
+static void handleWifiClient() {
+  noteWebActivity();
+  if (!requireAdminAuth()) return;
+  const bool enable = (server.arg("on") == "1");
+  s_staDisabled = !enable;
+  if (s_resetPrefsReady) s_resetPrefs.putBool("sta_off", s_staDisabled);
+  WiFi.setAutoReconnect(enable);
+  LogOut.println(enable ? "[WiFi] Istemci acildi (panel)." : "[WiFi] Istemci kapatildi (panel), AP acilacak.");
+  noteHttpResponseSent();
+  server.send(200, "application/json", "{\"ok\":1}");
+}
+
 static void handleWifiApply() {
   noteWebActivity();
   if (!requireAdminAuth()) return;
@@ -1953,7 +1988,7 @@ static void handleWifiApply() {
     changed = true;
   }
   if (server.hasArg("wifiDhcp")) {
-    s_wifiUseDhcp = (server.arg("wifiDhcp") != "0");
+    s_wifiUseDhcp = true;  // statik IP kaldirildi
     changed = true;
   }
 
@@ -3141,6 +3176,7 @@ void web_init() {
   server.on("/ota_install", HTTP_GET, handleOtaInstall);
   server.on("/wifi_scan", HTTP_GET, handleWifiScan);
   server.on("/wifi_apply", HTTP_GET, handleWifiApply);
+  server.on("/wifi_client", HTTP_GET, handleWifiClient);
   server.on("/boot_factory", HTTP_GET, handleBootFactory);
   server.on("/boot_prev", HTTP_GET, handleBootPrev);
   // Captive portal probe endpoints (Android/iOS/Windows)
@@ -3195,8 +3231,7 @@ void web_init() {
 static void web_tick() {
   // Arka plan servisleri her loop'ta buradan yurutulur.
   ensureServerStarted();
-  if (!s_serverStarted) return;
-  server.handleClient();
+  if (s_serverStarted) server.handleClient();
 
   if (s_manualOtaRebootPending && (int32_t)(millis() - s_manualOtaRebootAtMs) >= 0) {
     s_manualOtaRebootPending = false;
@@ -3208,7 +3243,11 @@ static void web_tick() {
   // WiFi yeniden baglanti denemesi: kisa timeout ile tekrar dene, uzun tarama ile donguyu kilitleme.
   static uint32_t lastWifiTryMs = 0;
   const uint32_t nowTry = millis();
-  if (WiFi.status() != WL_CONNECTED && (nowTry - lastWifiTryMs >= 10000)) {
+  if (s_staDisabled && WiFi.status() == WL_CONNECTED) {
+    delay(300);  // panel yaniti gitsin
+    WiFi.disconnect(false);
+  }
+  if (!s_staDisabled && WiFi.status() != WL_CONNECTED && nowTry > 30000 && (nowTry - lastWifiTryMs >= 10000)) {
     lastWifiTryMs = nowTry;
     if (s_customWifiEnabled && s_customWifiSsid.length() > 0) {
       applyIpMode();
@@ -3216,6 +3255,41 @@ static void web_tick() {
     } else {
       wifiMulti.run(1000);
     }
+  }
+
+  // Kurtarma AP: 60 sn baglanti yoksa kendi agini ac (AP+STA), baglaninca kapat.
+  static uint32_t offlineSinceMs = 0;
+  static uint32_t onlineSinceMs = 0;
+  bool& apActive = s_rescueApActive;
+  static DNSServer apDns;
+  const uint32_t nowAp = millis();
+  if (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0) {
+    offlineSinceMs = 0;
+    if (onlineSinceMs == 0) onlineSinceMs = nowAp;
+    if (apActive && (nowAp - onlineSinceMs) >= 10000) {
+      apDns.stop();
+      WiFi.softAPdisconnect(true);
+      apActive = false;
+      LogOut.println("[WiFi] Baglandi, kurtarma AP kapatildi.");
+    }
+  } else {
+    onlineSinceMs = 0;
+    if (offlineSinceMs == 0) offlineSinceMs = nowAp;
+    if (!apActive && (s_staDisabled || (nowAp - offlineSinceMs) >= 60000UL)) {
+      WiFi.mode(WIFI_AP_STA);
+      if (WiFi.softAP(currentHostName(), EVSE_AP_PASSWORD)) {
+        apDns.start(53, "*", WiFi.softAPIP());
+        apActive = true;
+        LogOut.print("[WiFi] Kurtarma AP acik: ");
+        LogOut.print(currentHostName());
+        LogOut.print(" -> http://");
+        LogOut.println(WiFi.softAPIP());
+      } else {
+        offlineSinceMs = nowAp;  // basarisizsa 60 sn sonra tekrar dene
+        LogOut.println("[WiFi] Kurtarma AP acilamadi.");
+      }
+    }
+    if (apActive) apDns.processNextRequest();
   }
 
   static bool printed = false;
