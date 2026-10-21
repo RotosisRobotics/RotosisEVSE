@@ -800,7 +800,9 @@ void loop()
   bool manualStopAlertOn = (g_manualStopAlertUntilMs != 0 && ((int32_t)(g_manualStopAlertUntilMs - ledNowMs) > 0));
   bool errorOn = (m.stateStable == "E" || m.stateStable == "F" || manualStopAlertOn);
   digitalWrite(STATE_LED_PIN, stateBlink ? HIGH : LOW);
-  digitalWrite(WIFI_LED_PIN, staOk ? HIGH : LOW);
+  // Wi-Fi LED: istemci bagliyken sabit yanik, kurtarma AP'si acikken yavas yanip soner (1 Hz).
+  const bool apBlink = web_rescue_ap_active() && ((ledNowMs / 500) % 2 == 0);
+  digitalWrite(WIFI_LED_PIN, (staOk || apBlink) ? HIGH : LOW);
   digitalWrite(ERROR_LED_PIN, errorOn ? HIGH : LOW);
 
   // Manuel stop 60 saniye sonra otomatik AUTO moduna donsün.

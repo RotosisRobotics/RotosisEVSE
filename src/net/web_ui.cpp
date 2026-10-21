@@ -1098,7 +1098,7 @@ static const char MANIFEST_JSON[] PROGMEM = R"JSON(
 )JSON";
 
 static const char SERVICE_WORKER_JS[] PROGMEM = R"JS(
-const CACHE_NAME = "evse-pwa-v10";
+const CACHE_NAME = "evse-pwa-v11";
 const ASSETS = ["/", "/manifest.json", "/app-icon.svg", "/vehicle-top-art.svg", "/togg-arac-v2.webp"];
 
 self.addEventListener("install", (event) => {
@@ -3330,6 +3330,8 @@ void web_loop() {
   if (s_webTaskHandle != nullptr) return;
   web_tick();
 }
+
+bool web_rescue_ap_active() { return s_rescueApActive; }
 
 bool web_ready_for_ota_validation() {
   bool staOk = (WiFi.status() == WL_CONNECTED && WiFi.localIP()[0] != 0);
