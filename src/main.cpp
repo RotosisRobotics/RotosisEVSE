@@ -10,6 +10,7 @@
 #include "pilot/pilot.h"
 #include "pilot/wake_core.h"
 #include "pilot/wake_cfg.h"
+#include "pilot/full_cfg.h"
 #include "io/relay.h"
 #include "net/web_ui.h"
 #include "net/cloud_client.h"
@@ -340,6 +341,16 @@ static uint32_t sessionActiveMs = 0;   // seansin gercek sarj suresi (duraklamal
 static float sessionStartEnergyWh = 0.0f;
 static uint8_t sessionPhaseMax = 1;
 
+// Dolu arac korumasi: arac kendi kesip kisa sure sonra tekrar isterse (az enerji, kisa C suresi)
+// ust uste ayarli sayida olunca PWM kapatilir; fis cikinca (A) ya da panelden "Kilidi kaldir" ile kalkar.
+static bool     g_fullLock = false;
+static uint8_t  s_shortCycles = 0;
+static uint32_t s_cycStartMs = 0;
+static float    s_cycStartWh = 0.0f;
+bool    full_runtime_locked() { return g_fullLock; }
+uint8_t full_runtime_cycles() { return s_shortCycles; }
+void    full_runtime_clear() { g_fullLock = false; s_shortCycles = 0; }
+
 // Gecmis ekranini ve web API'sini sifirlamak icin kullanilir.
 void resetHistoryData()
 {
@@ -538,6 +549,8 @@ static void wake_log(const evse_wake::Output& o, const PilotMeasurements& m, flo
 static void onVehicleUnplugged()
 {
   g_chargeMode = 0;                 // panel START/STOP ve bulut STOP modu biter
+  g_fullLock = false;               // dolu arac kilidi yeni takmada kalkar
+  s_shortCycles = 0;
   g_manualStopAlertUntilMs = 0;
   g_manualStopAutoResumeAtMs = 0;
   cloud_on_vehicle_unplugged();     // bulut "start" onayi, guvenli durdurma, bulut STOP kilidi
@@ -597,6 +610,7 @@ void setup()
 
   // Web + OTA
   sched_init();   // planli sarj ayari (NVS), web_init /status'ta kullanir
+  full_cfg_init(); // dolu arac korumasi ayari (NVS), /api/full
   wake_cfg_init(); // arac uyandirma ayari (NVS), /api/wake
   web_init();
   cloud_init();   // sarj sunucusu istemcisi (anahtar yoksa kapali)
@@ -815,6 +829,31 @@ void loop()
 
 
 
+  // Dolu arac tespiti: C/D -> B gecisi PWM aciksa arac kendisi kesmistir (STOP/izin degil).
+  {
+    const FullCfg fc = full_cfg_get();
+    if (!fc.enabled) full_runtime_clear();
+    const bool nowCD = (m.stateStable == "C" || m.stateStable == "D");
+    static bool prevCD = false;
+    if (nowCD && !prevCD) {
+      s_cycStartMs = nowMs;
+      s_cycStartWh = energyWh;
+    } else if (fc.enabled && !nowCD && prevCD && m.stateStable == "B" && pwmEnabled && g_chargeMode == 0) {
+      uint32_t durS = (nowMs - s_cycStartMs) / 1000;
+      float wh = energyWh - s_cycStartWh;
+      if (durS < fc.maxSec && wh < (float)fc.maxWh) {
+        if (++s_shortCycles >= fc.maxCycles && !g_fullLock) {
+          g_fullLock = true;
+          LogOut.printf("[DOLU] Arac %u kisa dongu ust uste kesti (son: %us, %.0fWh): arac dolu, PWM kapatildi\n",
+                        (unsigned)s_shortCycles, (unsigned)durS, wh);
+        }
+      } else {
+        s_shortCycles = 0;
+      }
+    }
+    prevCD = nowCD;
+  }
+
   // IEC state'e gore hedef PWM durumu burada belirlenir.
   bool nextPwmEnabled = false;
   int nextDuty = 0;
@@ -844,6 +883,13 @@ void loop()
       nextPwmEnabled = true;
       nextDuty = amps_to_duty(g_targetCurrentLimitA);
     }
+  }
+
+  // Panel START dolu arac kilidini kaldirir; kilit varken PWM kapali (arac B'de bekler).
+  if (g_chargeMode == 1) { g_fullLock = false; s_shortCycles = 0; }
+  if (g_fullLock) {
+    nextPwmEnabled = false;
+    nextDuty = 0;
   }
 
   // Bulut guvenli modu (requireCloudStart) ve planli sarj (yasakli saat araligi).

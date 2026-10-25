@@ -21,6 +21,7 @@
 #include "togg_arac_v2_webp.h"
 #include "pilot/pilot.h"
 #include "pilot/wake_cfg.h"
+#include "pilot/full_cfg.h"
 #include "io/relay.h"
 #include "io/relay_core.h"
 
@@ -1341,7 +1342,6 @@ tr:last-child td{border-bottom:0}
   <a class="nav" id="navStatus" href="#status" data-s="statusCard"><svg><use href="#iS"/></svg>Durum</a>
   <a class="nav" id="navCalibration" href="#settings" data-s="calibrationCard"><svg><use href="#iC"/></svg>Ayarlar</a>
   <a class="nav" id="navWifi" href="#wifi" data-s="wifiCard"><svg><use href="#iW"/></svg>Wi-Fi</a>
-  <a class="nav yan" id="navTest" href="#test" data-s="testCard"><svg><use href="#iT"/></svg>Test</a>
   <a class="nav" id="navOta" href="#ota" data-s="otaCard"><svg><use href="#iO"/></svg>Yazılım</a>
 </nav>
 <main id="icerik">
@@ -1352,7 +1352,6 @@ tr:last-child td{border-bottom:0}
   <div class="kart genis">
     <div class="hero">
       <div class="st"><div class="stL" id="stBox">-</div><div><div class="stT" id="stTxt">-</div><div class="stS"><span id="badgeState">STATE:-</span> · Ham <span id="sRawTop">-</span> · Mod <span id="modeTxt">-</span> · <span id="badgeRelay">R: -</span></div></div></div>
-      <div class="seg" id="modeSeg"><button data-m="0" onclick="chargeCmd(0)">Otomatik</button><button data-m="1" onclick="chargeCmd(1)">Başlat</button><button data-m="2" class="dur" onclick="chargeCmd(2)">Durdur</button></div>
     </div>
     <div class="alarm" id="alarmBox" hidden></div>
   </div>
@@ -1418,7 +1417,7 @@ tr:last-child td{border-bottom:0}
     </form></div>
   <div class="kart"><h2>Oturum</h2>
     <dl class="bilgi"><dt>Kullanıcı</dt><dd>admin</dd><dt>Otomatik çıkış</dt><dd><span id="idleLeft">15:00</span> sonra</dd></dl>
-    <div class="satir" style="margin-top:12px"><button class="ik" onclick="location.hash='test'">Servis testleri</button><button class="th" onclick="logout()">Çıkış yap</button></div></div>
+    <div class="satir" style="margin-top:12px"><button class="th" onclick="logout()">Çıkış yap</button></div></div>
   <div class="kart genis" id="cloudBox"><h2>Bulut bağlantısı <span class="s rozet" id="cloudTag">-</span></h2>
     <div class="mesaj uyari" id="cloudWarn" style="margin:0 0 12px" hidden>Bulut ayarı yapılmadı: istasyon kodunu kontrol edip sunucudan alınan gizli anahtarı girin.</div>
     <dl class="bilgi"><dt>Durum</dt><dd id="cloudPhase">-</dd><dt>Son yoklama</dt><dd id="cloudAge">-</dd><dt>Son HTTP</dt><dd id="cloudHttp">-</dd><dt>Son komut</dt><dd id="cloudCmd">-</dd><dt>Gizli anahtar</dt><dd id="cloudSecretState">-</dd></dl>
@@ -1437,6 +1436,12 @@ tr:last-child td{border-bottom:0}
     <div id="schedRows"></div>
     <div class="satir"><button class="ik" onclick="schedAdd()">Aralık ekle</button><button class="ik" onclick="schedPeak()">Puant (17–22)</button><button onclick="schedSave()">Kaydet</button></div>
     <p class="not" style="margin:10px 0 0">Türkiye saati (UTC+3). Gece yarısını aşan aralık olabilir (örn. 23:00–06:00); aralık başladığı güne aittir. En çok 3 aralık. Cihaz saati bilinmiyorsa kısıtlama uygulanmaz.</p></div>
+  <div class="kart genis" id="fullBox"><h2>Dolu araç koruması <span class="s rozet" id="fullTag">-</span></h2>
+    <p class="not">Araç şarjı kendisi kesip kısa süre sonra tekrar isterse (kısa süre, az enerji) ayarlı sayıda üst üste olunca şarj izni kapanır. Fiş çekilince ya da kilit kaldırılınca devam eder.</p>
+    <label class="ck"><input type="checkbox" id="fullOn">Koruma açık</label>
+    <div class="f" data-f="fullSec|Kısa şarj süresi|sn|600;fullWh|Kısa şarj enerjisi|Wh|500;fullN|Kilitleme denemesi||2"></div>
+    <div class="satir"><button onclick="fullSave()">Kaydet</button><button class="ik" id="fullClr" onclick="fullClear()">Kilidi kaldır</button></div>
+    <p class="not" style="margin:10px 0 0">Durum: <span id="fullNow">-</span></p></div>
   <div class="kart genis" id="wakeBox"><h2>Araç uyandırma <span class="s rozet" id="wakeTag">-</span></h2>
     <p class="not">Araç uzun PWM'siz beklemeden (planlı şarj / uygulama onayı) sonra B'de kalırsa denenir. Yalnız durum B, kontaktör açık ve akım yokken.</p>
     <label class="ck"><input type="checkbox" id="wakeOn">Uyandırma açık</label>
@@ -1466,19 +1471,6 @@ tr:last-child td{border-bottom:0}
     <div class="satir" style="margin-top:12px"><button class="th" onclick="wifiClient(0)">İstemciyi kapat (AP aç)</button><button class="ik" onclick="wifiClient(1)">İstemciyi aç</button></div></div>
   <div class="kart"><h2>Çevredeki ağlar <button class="s ik" onclick="scanWifiList()">Tara</button></h2>
     <p class="not" id="wifiScanStatus">Tarama hazır değil</p><div id="wifiScanList" class="wl"></div></div>
-</div>
-</section>
-
-<!-- TEST -->
-<section class="sec" id="testCard">
-<div class="bas"><h1>Servis testleri</h1><button class="ik" onclick="location.hash='settings'">Ayarlar'a dön</button></div>
-<div class="mesaj uyari" style="margin:0 0 14px"><b>Servis modu.</b> Bu komutlar otomatik akışa anında müdahale eder; araç bağlıyken dikkatli kullanın.</div>
-<div class="izgara">
-  <div class="kart"><h2>Röle <span class="s rozet" id="relayTag">-</span></h2>
-    <div class="satir"><button class="iy" onclick="send('/relay?on=1')">Manuel aç</button><button class="th" onclick="send('/relay?on=0')">Manuel bırak</button><button class="ik" onclick="send('/relay_auto?en=1')">Otomatiğe dön</button></div></div>
-  <div class="kart"><h2>MOSFET darbe testi</h2>
-    <div class="satir"><button class="th" onclick="send('/pulse_reset')">RESET (GPIO 7)</button><button class="iy" onclick="send('/pulse_set')">SET (GPIO 15)</button></div>
-    <p class="not" style="margin:10px 0 0">Her basış 100 ms HIGH darbe gönderir. Manuel aç ve SET yalnız durum C/D + PWM açıkken kabul edilir; bırakma/RESET her zaman serbest.</p></div>
 </div>
 </section>
 
@@ -1602,11 +1594,11 @@ const ask={open(o){T('dlgT',o.t);T('dlgM',o.m);$('dlg').className='dlg'+(o.red?'
 $('ov').addEventListener('click',e=>{if(e.target.id==='ov')ask.close();});
 
 /* --- Gezinme --- */
-const SECS=['liveCard','statusCard','calibrationCard','wifiCard','testCard','otaCard'];
-const HASH={live:'liveCard',admin:'liveCard',status:'statusCard',settings:'calibrationCard',calibration:'calibrationCard',wifi:'wifiCard',test:'testCard',ota:'otaCard'};
+const SECS=['liveCard','statusCard','calibrationCard','wifiCard','otaCard'];
+const HASH={live:'liveCard',admin:'liveCard',status:'statusCard',settings:'calibrationCard',calibration:'calibrationCard',wifi:'wifiCard',ota:'otaCard'};
 function showPage(id){SECS.forEach(s=>$(s).classList.toggle('on',s===id));
-  document.querySelectorAll('a.nav').forEach(a=>a.classList.toggle('active',a.dataset.s===id||(id==='testCard'&&a.id==='navCalibration')));
-  if(id==='statusCard')loadHistory();if(id==='calibrationCard')loadWake();scrollTo(0,0);}
+  document.querySelectorAll('a.nav').forEach(a=>a.classList.toggle('active',a.dataset.s===id));
+  if(id==='statusCard')loadHistory();if(id==='calibrationCard'){loadWake();loadFull();}scrollTo(0,0);}
 function applyPageMode(){const m=PAGE_MODE.indexOf('__')===0?'admin':PAGE_MODE;showPage(HASH[location.hash.slice(1)]||HASH[m]||'liveCard');}
 addEventListener('hashchange',()=>{if(TOK)applyPageMode();});
 function refreshAll(){const b=$('refreshBtn');b.classList.add('spin');pull(true);if($('statusCard').classList.contains('on'))loadHistory();setTimeout(()=>b.classList.remove('spin'),800);}
@@ -1633,8 +1625,7 @@ function render(d,force){
   [['i1',d.ia,'b1'],['i2',d.ib,'b2'],['i3',d.ic,'b3']].forEach(a=>{const v=num(a[1]),b=$(a[2]);T(a[0],v.toFixed(2));b.style.width=Math.min(100,v/lim*100)+'%';b.style.background=v>lim+1?'var(--kotu)':'';});
   T('pwr',kw.toFixed(2));T('pMax',kwMax.toFixed(1));$('pBar').style.width=Math.min(100,kw/kwMax*100)+'%';
   T('ekwh',num(d.eKWh).toFixed(3));T('sLiveKWh',d.sLive?num(d.sLiveKWh).toFixed(3):'-');T('tsec',fmtTime(num(d.tSec)));T('phase',ph+'F');T('limitTxt',lim.toFixed(0));T('iAvgTag','ORT '+num(d.iAvg).toFixed(2)+' A');
-  T('rLbl',d.rLbl||'-');const rt=$('relayTag');rt.textContent=d.rLbl||'-';rt.className='s rozet '+(d.rLbl==='SET'?'iyi':'');
-  T('wifiSsid',d.wifiSsid||'-');T('wifiLoc',d.wifiLoc||'-');T('ip',d.ip||'-');T('host',d.host||'-');T('mac',d.mac||'-');T('stationCode',d.stationCode||'-');T('stationAddr',d.stationAddr||'-');T('stationAddr2',d.stationAddr||'-');
+  T('rLbl',d.rLbl||'-');  T('wifiSsid',d.wifiSsid||'-');T('wifiLoc',d.wifiLoc||'-');T('ip',d.ip||'-');T('host',d.host||'-');T('mac',d.mac||'-');T('stationCode',d.stationCode||'-');T('stationAddr',d.stationAddr||'-');T('stationAddr2',d.stationAddr||'-');
   T('rstTotal',d.rstTotal||0);T('rstNow',d.rstNow||0);T('rstHist',d.rstHist||0);T('rstLastMode',d.rstLastMode||'YOK');T('rstLastSec',d.rstLastSec||0);
   T('liveIa',num(d.ia).toFixed(2));T('liveIb',num(d.ib).toFixed(2));T('liveIc',num(d.ic).toFixed(2));T('liveIAvg',num(d.iAvg).toFixed(2));
   renderOta(d);if(d.pwMustChange!==undefined)pwBand(!!d.pwMustChange);renderCloud(d.cloud);renderSched(d.sched);
@@ -1665,7 +1656,7 @@ function loadHistory(){getJSON('/history').then(h=>{const it=(h.items||[]).slice
 
 /* --- Ayarlar --- */
 function markCal(){const e=$('calDirty');e.textContent=calDirty?'Kaydedilmemiş değişiklik var':'Değişiklik yok';e.className=calDirty?'kirli':'';}
-$('calForm').addEventListener('input',e=>{if(!/^(clamp|wake)/.test(e.target.id)){calDirty=true;markCal();}});
+$('calForm').addEventListener('input',e=>{if(!/^(clamp|wake|full)/.test(e.target.id)){calDirty=true;markCal();}});
 function fillClamp(k){let c=0;['A','B','C'].forEach(ph=>{const ref=num($('clamp'+k+ph).value),live=num($('liveI'+ph).textContent);
   if(k==='Low'&&ref>0&&live>.2){$('ical'+ph).value=(num($('ical'+ph).value,12)*ref/live).toFixed(2);c++;}
   if(k==='Mid'&&ref>0&&live>0){$('ioff'+ph).value=(ref-live).toFixed(2);c++;}});
@@ -1733,6 +1724,18 @@ function schedSave(){if(!SCH)return;const on=$('schedOn').checked,ws=SCH.windows
   const go=()=>api('/api/schedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on:on,windows:ws})})
     .then(x=>x.json().catch(()=>({})).then(j=>{if(!x.ok)throw new Error(j.error||('HTTP '+x.status));schedDirty=false;SCH=null;renderSched(j);toast('Planlı şarj kaydedildi');pull(true);})).catch(e=>toast(e.message));
   if(on)ask.open({t:'Planlı şarj açılsın mı?',m:'Yasaklı saatlerde şarj güvenle durdurulur, araç bağlıysa aralık bitince kendiliğinden devam eder.',ok:'Kaydet',go});else go();}
+
+/* --- Dolu arac korumasi (/api/full) --- */
+let fullDirty=false;
+['fullOn','fullSec','fullWh','fullN'].forEach(i=>$(i).addEventListener('input',()=>{fullDirty=true;}));
+function renderFull(f,force){if(!f)return;const tg=$('fullTag');tg.className='s rozet '+(f.locked?'uyari':(f.on?'iyi':''));tg.textContent=f.locked?'Kilitli (araç dolu)':(f.on?'Açık':'Kapalı');
+  T('fullNow',f.locked?'Araç dolu kabul edildi, şarj izni kapalı':('Kısa deneme sayısı '+f.cycles+'/'+f.n));
+  if(fullDirty&&!force)return;setInput('fullOn',!!f.on,true);setInput('fullSec',f.sec,true);setInput('fullWh',f.wh,true);setInput('fullN',f.n,true);}
+function loadFull(){getJSON('/api/full').then(f=>renderFull(f,false)).catch(()=>{});}
+function fullPost(b,msg){return api('/api/full',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
+  .then(x=>x.json().catch(()=>({})).then(j=>{if(!x.ok)throw new Error(j.error||('HTTP '+x.status));fullDirty=false;renderFull(j,true);toast(msg);})).catch(e=>toast(e.message));}
+function fullSave(){fullPost({on:$('fullOn').checked,sec:Math.round(num($('fullSec').value)),wh:Math.round(num($('fullWh').value)),n:Math.round(num($('fullN').value))},'Dolu araç ayarı kaydedildi');}
+function fullClear(){fullPost({clear:true},'Kilit kaldırıldı');}
 
 /* --- Arac uyandirma (/api/wake) --- */
 let wakeDirty=false;
@@ -3087,6 +3090,58 @@ static void handleApiWakePost() {
   noteHttpResponseSent();
 }
 
+static void handleApiFullGet() {
+  noteWebActivity();
+  if (!requireAdminAuth()) return;
+  char out[160];
+  full_status_json(out, sizeof(out));
+  sendJsonNoStore(200, out[0] ? out : "{}");
+  noteHttpResponseSent();
+}
+
+// POST /api/full {on?, sec?, wh?, n?, clear?:true} (eksik alan korunur) -> 200 durum | 400 {error}
+static void handleApiFullPost() {
+  noteWebActivity();
+  if (!requireAdminAuth()) return;
+  const String& body = server.arg("plain");
+  StaticJsonDocument<192> doc;
+  if (body.length() == 0 || body.length() > 150 || deserializeJson(doc, body) != DeserializationError::Ok ||
+      !doc.is<JsonObject>()) {
+    sendJsonNoStore(400, "{\"error\":\"Gecersiz istek\"}");
+    return;
+  }
+  FullCfg c = full_cfg_get();
+  JsonVariant v = doc["on"];
+  if (!v.isNull()) {
+    if (!v.is<bool>()) { sendJsonNoStore(400, "{\"error\":\"on true/false olmali\"}"); return; }
+    c.enabled = v.as<bool>();
+  }
+  struct { const char* key; long lo; long hi; } nums[] = {{"sec", 30, 7200}, {"wh", 10, 20000}, {"n", 1, 10}};
+  long val[3] = {c.maxSec, c.maxWh, c.maxCycles};
+  for (int i = 0; i < 3; i++) {
+    v = doc[nums[i].key];
+    if (v.isNull()) continue;
+    if (!v.is<long>() || v.as<long>() < nums[i].lo || v.as<long>() > nums[i].hi) {
+      String out = String("{\"error\":\"") + nums[i].key + " aralik disi\"}";
+      sendJsonNoStore(400, out);
+      return;
+    }
+    val[i] = v.as<long>();
+  }
+  c.maxSec = (uint16_t)val[0]; c.maxWh = (uint16_t)val[1]; c.maxCycles = (uint8_t)val[2];
+  const char* err = "";
+  if (!full_cfg_set(c, &err)) {
+    String out = String("{\"error\":\"") + err + "\"}";
+    sendJsonNoStore(400, out);
+    return;
+  }
+  if (doc["clear"] | false) full_runtime_clear();
+  char out[160];
+  full_status_json(out, sizeof(out));
+  sendJsonNoStore(200, out[0] ? out : "{}");
+  noteHttpResponseSent();
+}
+
 // GET /api/log[?since=N] (Bearer) -> text/plain: RAM halka tamponundaki seri log satirlari.
 // Her satir "<seq> [uptime_sn.ms HH:MM:SS] metin". since=N: yalniz seq > N olan satirlar.
 // Basliklar: X-Log-First (tampondaki en eski seq), X-Log-Last (bu yanittaki son seq; sonraki
@@ -3193,6 +3248,8 @@ void web_init() {
   server.on("/api/schedule", HTTP_GET, handleApiScheduleGet);
   server.on("/api/schedule", HTTP_POST, handleApiSchedulePost);
   server.on("/api/log", HTTP_GET, handleApiLog);
+  server.on("/api/full", HTTP_GET, handleApiFullGet);
+  server.on("/api/full", HTTP_POST, handleApiFullPost);
   server.on("/api/wake", HTTP_GET, handleApiWakeGet);
   server.on("/api/wake", HTTP_POST, handleApiWakePost);
   server.on("/status_public", HTTP_GET, handleStatusPublic);
