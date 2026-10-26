@@ -1,7 +1,7 @@
 {
-    "version": "1.1.73",
+    "version": "1.1.75",
     "hw": "SC_2",
     "url": "https://raw.githubusercontent.com/RotosisRobotics/RotosisEVSE/main/firmware/uzaktanotali_sc2.bin",
-    "size": 1265024,
-    "sha256": "6e3ac1ebad001a4005e5564f335e2647d2fae6bfdb04b4511c45a43894c21a24"
+    "size": 1269184,
+    "sha256": "a22d2845d84a12ca219091f48c77589886d06a5f29c0e71bb727cdd7a112ba56"
 }
